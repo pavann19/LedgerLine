@@ -1,0 +1,15 @@
+target/
+*.class
+*.log
+.idea/
+*.iml
+.vscode/
+.settings/
+.classpath
+.project
+.DS_Store
+.env
+*.tfstate
+*.tfstate.backup
+.terraform/
+ledger-service/.jqwik-database

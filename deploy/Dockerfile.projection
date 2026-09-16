@@ -1,0 +1,20 @@
+# Multi-stage Dockerfile for projection-service
+FROM eclipse-temurin:21-jdk-alpine AS builder
+WORKDIR /workspace
+
+COPY pom.xml mvnw mvnw.cmd ./
+COPY .mvn .mvn
+COPY ledger-service/pom.xml ledger-service/
+COPY projection-service/pom.xml projection-service/
+
+RUN ./mvnw dependency:go-offline -B -pl projection-service
+
+COPY projection-service/src projection-service/src
+RUN ./mvnw clean package -DskipTests -pl projection-service
+
+FROM eclipse-temurin:21-jre-alpine
+WORKDIR /app
+COPY --from=builder /workspace/projection-service/target/*.jar app.jar
+
+EXPOSE 8081
+ENTRYPOINT ["java", "-XX:+UseG1GC", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
