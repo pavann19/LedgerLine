@@ -198,22 +198,20 @@ bash smoke-test.sh
 | Metric | Variant 0 (Broken) | Variant 1 (Pessimistic) | Variant 2 (Optimistic) | Variant 3 (Serializable) |
 | :--- | :--- | :--- | :--- | :--- |
 | **Concurrency Model** | Read-then-write | `FOR UPDATE` (sorted UUIDs) | Version check + retry | SSI + retry on `40001` |
-| **High Contention RPS** | 1,510 rps | **890 rps** | 410 rps | 280 rps |
-| **High Contention p95** | 11.2 ms | **38.4 ms** | 98.2 ms | 142.6 ms |
-| **Retry Rate** | 0.0% | **0.0%** | 48.7% | 61.3% |
-| **Balance Invariant** | **FAILED (-$1,426 drift)** | **PASSED (Zero drift)** | **PASSED (Zero drift)** | **PASSED (Zero drift)** |
+| **Balance Invariant** | **FAILS** — `IsolationExperimentTest.demonstrateLostUpdateAnomalyInVariant0` asserts drift reproduces in a committed test run | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI |
+| **Throughput / p95 / retry rate** | *Not yet benchmarked* — `bench/k6-isolation-test.js` has not been run and no raw output is committed | *Not yet benchmarked* | *Not yet benchmarked* | *Not yet benchmarked* |
 
-*Complete empirical measurements and analysis are documented in [docs/experiments/01-isolation.md](docs/experiments/01-isolation.md).*
+Correctness rows above are backed by tests that run in CI on every push. The performance rows are deliberately left blank rather than filled with placeholder numbers — see [docs/experiments/01-isolation.md](docs/experiments/01-isolation.md) §4 for what's needed to fill them in for real.
 
 ---
 
 ## 8. Failure Testing Matrix (Summary)
 
-- **Worker Crash Mid-Publish**: Relay crashes after publishing to Kafka before marking row published $\to$ Event re-published, consumer deduplicates via `processed_events`.
-- **Message Redelivery**: Consumer crashes after DB commit before Kafka offset commit $\to$ Redelivery detected, projection updated exactly once.
-- **Kafka Outage**: Broker unreachable $\to$ Transfers commit synchronously to DB; outbox backlog accumulates; backlog drains completely upon broker restoration.
-- **Partial Failure / DB Outage**: High latency / network cuts $\to$ Requests fail cleanly; no half-written transactions; idempotent retry succeeds.
-- **Property-Based Testing**: 1,000 random traces executed against an in-memory double-entry oracle $\to$ Zero invariant violations.
+- **Worker Crash Mid-Publish**: Relay crashes after publishing to Kafka before marking row published $\to$ event re-published on next poll. Verified against a real Kafka Testcontainer via `AsyncFailureAndResilienceTest.shouldRepublishAfterSimulatedCrashBetweenSendAndMarkPublished`; the dedup half is verified separately by `ProjectionDeduplicationTest` (not yet one end-to-end run through a live consumer — see 02-failure-injection.md §3.1).
+- **Message Redelivery**: Consumer crashes after DB commit before Kafka offset commit $\to$ redelivery detected, projection updated exactly once. Verified by `ProjectionDeduplicationTest` against a real Postgres Testcontainer.
+- **Kafka Outage**: Broker unreachable $\to$ transfers commit synchronously to DB; outbox backlog accumulates; backlog drains completely once the broker recovers. Verified against a real, paused-then-unpaused Kafka Testcontainer broker (not a mock) in `AsyncFailureAndResilienceTest.shouldAccumulateOutboxBacklogWhenKafkaIsDownAndDrainAfterRecovery`.
+- **Partial Failure / DB Outage**: Toxiproxy-based DB outage testing is **not implemented** — the dependency is declared in `pom.xml` but no test uses it yet. Not claimed as verified.
+- **Property-Based Testing**: jqwik-generated random traces executed against the real `TransferService` + a real Postgres database (not an in-memory oracle) $\to$ zero invariant violations across all committed runs. See `DoubleEntryPropertyTest`.
 
 *Full details in [docs/experiments/02-failure-injection.md](docs/experiments/02-failure-injection.md).*
 
@@ -226,7 +224,8 @@ Prometheus metrics exposed at `http://localhost:8080/actuator/prometheus`:
 - `ledger.transfers.outcomes`: Counter of transfer outcomes (`success`, `insufficient_funds`, `idempotent_replay`, `idempotency_conflict`, `error`).
 - `ledger.outbox.backlog.size`: Real-time gauge of unpublished outbox events.
 - `ledger.outbox.oldest_unpublished_age_seconds`: Age in seconds of oldest unpublished event.
-- `ledger.projection.consumer.lag`: Kafka consumer group lag.
+
+**Not yet implemented**: consumer-lag metric, and lock-wait/serialization-failure/deadlock counters (`pg_stat_database`). Listed here as gaps, not as shipped metrics.
 
 ---
 

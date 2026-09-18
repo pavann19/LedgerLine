@@ -38,9 +38,45 @@ class IsolationExperimentTest extends BaseIntegrationTest {
     @Autowired
     private JdbcClient jdbcClient;
 
+    /**
+     * Variant 0 is a race condition, not a deterministic failure: a single trial can get lucky
+     * and interleave cleanly. So this runs the contended workload TRIALS times against fresh
+     * accounts and requires the drift to reproduce in at least MIN_OBSERVED_ANOMALIES of them —
+     * an assertion, not just a log line — and reports the observed anomaly rate.
+     */
     @Test
     @DisplayName("Variant 0 (Broken): Demonstrates lost-update anomaly under concurrent contention")
     void demonstrateLostUpdateAnomalyInVariant0() throws Exception {
+        int trials = 10;
+        int anomalies = 0;
+        long totalDrift = 0;
+
+        for (int t = 0; t < trials; t++) {
+            long drift = runVariant0Trial();
+            if (drift != 0) {
+                anomalies++;
+                totalDrift += Math.abs(drift);
+            }
+        }
+
+        double observedRate = (double) anomalies / trials;
+        log.info("Variant 0 lost-update anomaly observed in {}/{} trials (rate={}), total absolute drift={}",
+            anomalies, trials, observedRate, totalDrift);
+
+        int minObservedAnomalies = 1;
+        assertTrue(anomalies >= minObservedAnomalies,
+            "Expected the lost-update anomaly to reproduce in at least " + minObservedAnomalies
+                + "/" + trials + " trials under contention, but observed " + anomalies
+                + "/" + trials + " (rate=" + observedRate + "). "
+                + "Variant 0 is a deliberately unlocked read-then-write and should drift reliably; "
+                + "if this now passes clean, the broken variant may have accidentally been fixed.");
+    }
+
+    /**
+     * Runs one contended-transfer trial against a fresh pair of accounts and returns the drift
+     * between the postings-derived balance and the cached account_balances row (0 = no anomaly).
+     */
+    private long runVariant0Trial() throws Exception {
         AccountResponse from = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
         AccountResponse to = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
         long initialFunds = 100_000L;
@@ -77,7 +113,6 @@ class IsolationExperimentTest extends BaseIntegrationTest {
         doneLatch.await(30, TimeUnit.SECONDS);
         executor.shutdown();
 
-        // Total transfers successfully executed and recorded in postings table
         int executed = successCount.get();
         assertTrue(executed > 10, "Should have executed multiple concurrent transfers");
 
@@ -85,13 +120,7 @@ class IsolationExperimentTest extends BaseIntegrationTest {
         AccountResponse fromAfter = accountService.getAccount(from.id());
         long expectedFromBalance = initialFunds + postingsSumFrom;
 
-        log.info("Variant 0 Anomaly Check: Expected balance from postings = {}, Cached balance in account_balances = {}",
-            expectedFromBalance, fromAfter.balanceMinor());
-
-        // ANOMALY DEMONSTRATION: The cached balance in account_balances drifted due to lost updates!
-        boolean hasLostUpdate = (expectedFromBalance != fromAfter.balanceMinor());
-        log.info("Lost update observed in Variant 0: {}", hasLostUpdate);
-        // Note: Under concurrent execution of blind writes, lost updates occur predictably.
+        return expectedFromBalance - fromAfter.balanceMinor();
     }
 
     @Test
