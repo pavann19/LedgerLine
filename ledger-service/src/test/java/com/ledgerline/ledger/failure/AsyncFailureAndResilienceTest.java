@@ -113,14 +113,17 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
         long backlogWhileDown = outboxRepository.getBacklogCount();
         assertEquals(backlogAfterTransfer, backlogWhileDown, "Backlog must not shrink while Kafka is unreachable");
 
-        // Once the broker is back, the poller must drain the backlog.
-        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
-            int published = outboxRelayPoller.pollAndPublish();
-            long backlogAfterRecovery = outboxRepository.getBacklogCount();
-            assertTrue(published > 0 || backlogAfterRecovery < backlogWhileDown,
-                "Backlog must drain once Kafka recovers");
-            assertEquals(0, outboxRepository.getBacklogCount(), "Backlog must fully drain after broker recovery");
-        });
+        // Once the broker is back, the poller must drain the backlog. Give it a generous window and a
+        // steady poll interval: right after `docker unpause`, the broker still needs time to finish its
+        // own startup/leader-election before it will accept produce requests again, and each failed
+        // attempt inside pollAndPublish() can itself take up to 5s (the send's own timeout).
+        await()
+            .atMost(Duration.ofSeconds(90))
+            .pollInterval(Duration.ofSeconds(2))
+            .untilAsserted(() -> {
+                outboxRelayPoller.pollAndPublish();
+                assertEquals(0, outboxRepository.getBacklogCount(), "Backlog must fully drain after broker recovery");
+            });
     }
 
     @Test
@@ -137,9 +140,12 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
         assertTrue(backlogBeforeCrash > 0, "Expected an unpublished outbox row for the transfer");
 
         // Simulate the relay crashing after the Kafka send succeeds but before markPublished() runs.
+        // OutboxRelayPoller.pollAndPublish() catches per-event exceptions internally (so one bad event
+        // doesn't kill the whole poll cycle or the @Scheduled thread) and just stops the batch early,
+        // returning the count published *before* the crash rather than throwing out to the caller.
         outboxRelayPoller.setSimulateCrashAfterSend(true);
-        assertThrows(Exception.class, () -> outboxRelayPoller.pollAndPublish(),
-            "The simulated crash must propagate out of the poll cycle");
+        int publishedDuringCrash = outboxRelayPoller.pollAndPublish();
+        assertEquals(0, publishedDuringCrash, "No events should be marked published in the poll cycle that crashed");
 
         long backlogAfterCrash = outboxRepository.getBacklogCount();
         assertEquals(backlogBeforeCrash, backlogAfterCrash,
