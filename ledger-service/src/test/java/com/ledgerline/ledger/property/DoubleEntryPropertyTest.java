@@ -54,16 +54,19 @@ class DoubleEntryPropertyTest {
             .withPassword("test");
         postgres.start();
 
+        // Passed as command-line args (highest Spring Boot property precedence), not via
+        // .properties(...): that method feeds Spring's low-priority "defaultProperties"
+        // source, which application.yml's classpath values would silently win over.
         context = new SpringApplicationBuilder(LedgerApplication.class)
             .profiles("test")
-            .properties(
-                "spring.datasource.url=" + postgres.getJdbcUrl(),
-                "spring.datasource.username=" + postgres.getUsername(),
-                "spring.datasource.password=" + postgres.getPassword(),
-                "server.port=0",
-                "ledger.outbox.relay.enabled=false"
-            )
-            .run();
+            .run(
+                "--spring.datasource.url=" + postgres.getJdbcUrl(),
+                "--spring.datasource.username=" + postgres.getUsername(),
+                "--spring.datasource.password=" + postgres.getPassword(),
+                // This test only exercises the service layer directly; no HTTP server is needed.
+                "--spring.main.web-application-type=none",
+                "--ledger.outbox.relay.enabled=false"
+            );
 
         transferService = context.getBean(TransferService.class);
         accountService = context.getBean(AccountService.class);
@@ -83,11 +86,21 @@ class DoubleEntryPropertyTest {
 
     record Action(int fromIdx, int toIdx, long amount, String idempotencyKey) {}
 
+    // One Postgres instance/Spring context is shared across all @Property tries for speed (see
+    // startRealServiceAndDatabase). jqwik's shrinker repeatedly re-tries common values (e.g. "AAAAAAAA")
+    // for the idempotencyKey arbitrary across *different* top-level tries, so raw action keys can collide
+    // across tries even though within a single trace they're what's meant to test replay/reuse. Each try
+    // gets its own namespace prefix so only intra-trace reuse (the thing under test) can trigger a replay
+    // or a conflict; cross-try collisions never happen.
+    private static final java.util.concurrent.atomic.AtomicLong TRY_COUNTER = new java.util.concurrent.atomic.AtomicLong();
+
     @Property(tries = 20)
     void doubleEntryInvariantsHoldAgainstRealServiceAndDatabase(
         @ForAll("accountInitialBalances") List<Long> initialBalances,
         @ForAll("actionsList") List<Action> actions
     ) {
+        String tryPrefix = "try" + TRY_COUNTER.incrementAndGet() + "-";
+
         int numAccounts = initialBalances.size();
         List<UUID> accountIds = new ArrayList<>(numAccounts);
         long initialTotal = 0;
@@ -109,9 +122,10 @@ class DoubleEntryPropertyTest {
 
             TransferRequest request = new TransferRequest(accountIds.get(fromIdx), accountIds.get(toIdx), action.amount(), "USD");
             boolean isReplayOfSameKey = !usedKeys.add(action.idempotencyKey());
+            String namespacedKey = tryPrefix + action.idempotencyKey();
 
             try {
-                transferService.transfer(action.idempotencyKey(), request, IsolationVariant.VARIANT_1_PESSIMISTIC);
+                transferService.transfer(namespacedKey, request, IsolationVariant.VARIANT_1_PESSIMISTIC);
             } catch (InsufficientFundsException expectedRejection) {
                 // Cleanly rejected: no posting/balance mutation should have occurred.
             } catch (IdempotencyConflictException expectedOnKeyReuseWithDifferentPayload) {
