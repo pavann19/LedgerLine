@@ -1,0 +1,19 @@
+Run: 2026-09-18, local docker compose stack (deploy/compose.yaml), ledger-service on localhost:8080
+Seeded via bench/seed_accounts.py: 50 low-contention accounts, 3 high-contention accounts, funded $50,000,000.00 each (5,000,000,000 minor units)
+Variant runs executed in order: VARIANT_1_PESSIMISTIC, VARIANT_2_OPTIMISTIC, VARIANT_3_SERIALIZABLE, VARIANT_0_BROKEN (broken variant run last so its intentional corruption doesn't taint the other three)
+
+=== Per-account drift for the 3 high-contention accounts, isolated to VARIANT_0_BROKEN's run (measured immediately after it, following clean VARIANT_1/2/3 runs) ===
+              account_id              | cached_balance | expected_balance_from_postings | drift_minor_units 
+--------------------------------------+----------------+--------------------------------+-------------------
+ 42103849-5962-4ce0-8ad6-05f564b31dda |     4999996881 |                     4999996951 |               -70
+ 215d308f-fb7d-474d-a259-85980ed53df1 |     4999998524 |                     4999998560 |               -36
+ 4f36628e-39e8-4f44-a04b-5cf882712dd2 |     5000004639 |                     5000004489 |               150
+(3 rows)
+
+
+=== Global conservation-of-money check across all 53 seeded accounts, after all four variant runs ===
+ accounts | total_cached_balance | total_initial_funding | total_drift_minor_units 
+----------+----------------------+-----------------------+-------------------------
+       53 |         265000008812 |          265000000000 |                    8812
+(1 row)
+

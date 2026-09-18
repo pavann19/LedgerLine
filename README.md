@@ -199,9 +199,10 @@ bash smoke-test.sh
 | :--- | :--- | :--- | :--- | :--- |
 | **Concurrency Model** | Read-then-write | `FOR UPDATE` (sorted UUIDs) | Version check + retry | SSI + retry on `40001` |
 | **Balance Invariant** | **FAILS** — `IsolationExperimentTest.demonstrateLostUpdateAnomalyInVariant0` asserts drift reproduces in a committed test run | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI |
-| **Throughput / p95 / retry rate** | *Not yet benchmarked* — `bench/k6-isolation-test.js` has not been run and no raw output is committed | *Not yet benchmarked* | *Not yet benchmarked* | *Not yet benchmarked* |
+| **High-contention RPS / p95 / p99** | 1.8/s / 20,328.5ms / 22,290.2ms | 258.9/s / 170.9ms / 226.0ms | 60.4/s / 1,383.0ms / 2,353.8ms | 50.0/s / 2,341.7ms / 3,403.8ms |
+| **High-contention failure rate** | 89.3% | 0% | 13.5% | 13.4% |
 
-Correctness rows above are backed by tests that run in CI on every push. The performance rows are deliberately left blank rather than filled with placeholder numbers — see [docs/experiments/01-isolation.md](docs/experiments/01-isolation.md) §4 for what's needed to fill them in for real.
+Correctness rows are backed by tests that run in CI on every push. Performance rows are from one real local k6 run against `docker compose -f deploy/compose.yaml` (50 low-contention / 3 high-contention accounts, 20 VUs, 30s per regime) — see [docs/experiments/01-isolation.md](docs/experiments/01-isolation.md) §4 for the full low+high tables, environment caveats, and the committed raw JSON under `bench/results/` each number is computed from.
 
 ---
 

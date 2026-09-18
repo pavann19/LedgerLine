@@ -33,9 +33,12 @@ export const options = {
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
 const VARIANT = __ENV.VARIANT || 'VARIANT_1_PESSIMISTIC';
 
-// Pre-created accounts list (setup step in a real run)
-const LOW_CONTENTION_ACCOUNTS = Array.from({ length: 50 }, (_, i) => `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`);
-const HIGH_CONTENTION_ACCOUNTS = Array.from({ length: 3 }, (_, i) => `00000000-0000-0000-0000-${String(i + 1).padStart(12, '0')}`);
+// Real accounts, created and funded by bench/seed_accounts.py before this script runs
+// (account IDs are server-generated and accounts start at zero balance, so they can't be
+// hardcoded or fabricated here — run the seed script first: `python bench/seed_accounts.py`).
+const seed = JSON.parse(open('./results/seed-accounts.json'));
+const LOW_CONTENTION_ACCOUNTS = seed.low;
+const HIGH_CONTENTION_ACCOUNTS = seed.high;
 
 export default function () {
   const isHigh = __ENV.CONTENTION === 'HIGH';
