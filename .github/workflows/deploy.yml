@@ -13,20 +13,13 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java 21
-        uses: actions/setup-java@v4
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-          cache: maven
-
-      - name: Package Applications
-        run: |
-          chmod +x mvnw
-          ./mvnw clean package -DskipTests --batch-mode
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
+
+      - name: Set up QEMU (cross-build for arm64 — the app host is Graviton2/t4g)
+        uses: docker/setup-qemu-action@v3
+        with:
+          platforms: arm64
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -40,8 +33,61 @@ jobs:
         with:
           terraform_version: 1.8.0
 
-      - name: Terraform Init & Apply
+      - name: Terraform Init
+        working-directory: deploy
+        run: terraform init
+
+      # Phase 1: create just the ECR repos (idempotent, safe to re-run) so there's somewhere
+      # to push the images to before the EC2 instance's user_data tries to pull them.
+      - name: Terraform Apply (ECR repositories only)
         working-directory: deploy
         run: |
-          terraform init
-          terraform apply -auto-approve -var="db_password=${{ secrets.RDS_DB_PASSWORD }}"
+          terraform apply -auto-approve \
+            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
+            -target=aws_ecr_repository.ledger_service \
+            -target=aws_ecr_repository.projection_service
+
+      - name: Capture ECR repo URLs
+        id: ecr_repos
+        working-directory: deploy
+        run: |
+          echo "ledger_repo_url=$(terraform output -raw ecr_ledger_service_repo_url)" >> "$GITHUB_OUTPUT"
+          echo "projection_repo_url=$(terraform output -raw ecr_projection_service_repo_url)" >> "$GITHUB_OUTPUT"
+
+      - name: Log in to ECR
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build & Push ledger-service image (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.ledger
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr_repos.outputs.ledger_repo_url }}:${{ github.ref_name }}
+            ${{ steps.ecr_repos.outputs.ledger_repo_url }}:latest
+
+      - name: Build & Push projection-service image (linux/arm64)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: deploy/Dockerfile.projection
+          platforms: linux/arm64
+          push: true
+          tags: |
+            ${{ steps.ecr_repos.outputs.projection_repo_url }}:${{ github.ref_name }}
+            ${{ steps.ecr_repos.outputs.projection_repo_url }}:latest
+
+      # Phase 2: full apply — EC2 user_data is templated with the image tag just pushed above,
+      # so the instance's first boot actually pulls and runs the real application, not just Docker.
+      - name: Terraform Apply (full — RDS, EC2, IAM)
+        working-directory: deploy
+        run: |
+          terraform apply -auto-approve \
+            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
+            -var="image_tag=${{ github.ref_name }}"
+
+      - name: Terraform Outputs
+        working-directory: deploy
+        run: terraform output

@@ -29,7 +29,18 @@ variable "db_password" {
   type        = string
   description = "PostgreSQL master password"
   sensitive   = true
-  default     = "LedgerlineSecure2026!"
+}
+
+variable "image_tag" {
+  type        = string
+  description = "Tag of the ledger-service/projection-service images to deploy (pushed to ECR by CI before this apply runs)"
+  default     = "latest"
+}
+
+data "aws_caller_identity" "current" {}
+
+locals {
+  ecr_registry = "${data.aws_caller_identity.current.account_id}.dkr.ecr.${var.aws_region}.amazonaws.com"
 }
 
 # 1. Network Topology (VPC & Subnets)
@@ -161,7 +172,54 @@ resource "aws_db_instance" "postgres" {
   tags = { Environment = var.environment }
 }
 
-# 4. Compute: App Runner Host (t4g.small ARM64 with Docker & Kafka container)
+# 4. Container Registry: ECR repos for the two application images.
+# CI does a two-phase apply: `terraform apply -target=aws_ecr_repository...` first so the
+# repos exist to push into, then builds+pushes the images, then the full apply below bakes
+# that exact image tag into the EC2 user_data so the instance can actually pull and run them
+# on first boot — this is the part that was previously missing (user_data only installed Docker).
+resource "aws_ecr_repository" "ledger_service" {
+  name                 = "ledgerline/ledger-service"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+}
+
+resource "aws_ecr_repository" "projection_service" {
+  name                 = "ledgerline/projection-service"
+  image_tag_mutability = "MUTABLE"
+  force_delete         = true
+}
+
+# 5. IAM: lets the EC2 instance pull from ECR and be reached via SSM Session Manager
+# (no SSH key pair / open port 22 needed to run the smoke test or psql invariant queries).
+resource "aws_iam_role" "app_host" {
+  name = "ledgerline-app-host-role"
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Action    = "sts:AssumeRole"
+      Effect    = "Allow"
+      Principal = { Service = "ec2.amazonaws.com" }
+    }]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "ecr_read" {
+  role       = aws_iam_role.app_host.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly"
+}
+
+resource "aws_iam_role_policy_attachment" "ssm" {
+  role       = aws_iam_role.app_host.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_instance_profile" "app_host" {
+  name = "ledgerline-app-host-profile"
+  role = aws_iam_role.app_host.name
+}
+
+# 6. Compute: App Host (t4g.small ARM64) running Kafka + ledger-service + projection-service
+# + Prometheus via Docker Compose, pulled from ECR at boot.
 data "aws_ami" "amazon_linux_2023" {
   most_recent = true
   owners      = ["amazon"]
@@ -176,25 +234,41 @@ resource "aws_instance" "app_host" {
   instance_type          = "t4g.small"
   subnet_id              = aws_subnet.public_a.id
   vpc_security_group_ids = [aws_security_group.app_sg.id]
+  iam_instance_profile   = aws_iam_instance_profile.app_host.name
 
-  user_data = <<-EOF
-              #!/bin/bash
-              dnf update -y
-              dnf install -y docker git
-              systemctl enable --now docker
-              usermod -aG docker ec2-user
-              EOF
+  user_data = templatefile("${path.module}/cloud-init.sh.tpl", {
+    aws_region   = var.aws_region
+    ecr_registry = local.ecr_registry
+    image_tag    = var.image_tag
+    db_endpoint  = aws_db_instance.postgres.endpoint
+    db_password  = var.db_password
+  })
 
   tags = {
     Name        = "ledgerline-app-host"
     Environment = var.environment
   }
+
+  depends_on = [
+    aws_ecr_repository.ledger_service,
+    aws_ecr_repository.projection_service,
+  ]
 }
 
 # Outputs
 output "app_public_ip" {
   value       = aws_instance.app_host.public_ip
   description = "Public IP address of Ledgerline App Host"
+}
+
+output "ecr_ledger_service_repo_url" {
+  value       = aws_ecr_repository.ledger_service.repository_url
+  description = "ECR repository URL to push the ledger-service image to (do this before the full apply)"
+}
+
+output "ecr_projection_service_repo_url" {
+  value       = aws_ecr_repository.projection_service.repository_url
+  description = "ECR repository URL to push the projection-service image to (do this before the full apply)"
 }
 
 output "ledger_service_url" {
