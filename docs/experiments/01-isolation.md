@@ -3,11 +3,16 @@
 ## 1. Executive Summary
 This experiment investigates the correctness, throughput, and latency characteristics of four concurrency control strategies for financial double-entry transfers under varying levels of contention.
 
-The experiment proves:
-1. **Unprotected read-then-write (Variant 0)** in standard `READ COMMITTED` mode leads directly to **lost-update anomalies** and permanent balance drift under concurrent execution.
-2. **Pessimistic locking with deterministic UUID ordering (Variant 1)** completely eliminates deadlocks, guarantees zero balance drift, and achieves the highest throughput under high contention.
-3. **Optimistic locking with version checking and exponential backoff (Variant 2)** performs well under low contention but suffers from retry storms and increased latency under high contention on hot accounts.
-4. **PostgreSQL SERIALIZABLE isolation with automated 40001 retry (Variant 3)** guarantees serial correctness, but incurs significant abort overhead and serialization failure retry latency when contention is concentrated on few accounts.
+**Status: correctness claims below are backed by committed, executable tests (§2, §3). Throughput/latency claims are not yet backed by a committed benchmark run — see §4 — and should be read as expected behavior from the locking mechanism, not as measured results.**
+
+What the committed tests demonstrate:
+1. **Unprotected read-then-write (Variant 0)** in standard `READ COMMITTED` mode leads directly to **lost-update anomalies** and balance drift under concurrent execution — asserted by `IsolationExperimentTest.demonstrateLostUpdateAnomalyInVariant0`.
+2. **Pessimistic locking with deterministic UUID ordering (Variant 1)**, **optimistic locking with version retry (Variant 2)**, and **SERIALIZABLE with 40001 retry (Variant 3)** all preserve exact zero balance drift under concurrent contention — each asserted by its own test in `IsolationExperimentTest`.
+
+What is expected but not yet measured (pending §4):
+- Variant 1 is expected to have the lowest p95 latency and fewest aborts under hot-account contention, since it queues at the row level with zero retries.
+- Variant 2 is expected to degrade under high contention on the same accounts (retry storms on version conflicts).
+- Variant 3 is expected to show the highest abort/retry overhead under contention concentrated on few accounts, from PostgreSQL's SSI conflict detection.
 
 ---
 
@@ -36,49 +41,29 @@ UPDATE account_balances SET balance_minor = 99900 WHERE account_id = 'A'; -- Thr
 ```
 
 ### Empirical Test Result
-- Total transfers executed: 160 transfers of 100 minor units ($160.00 total debit).
-- Expected final balance calculated from postings (`initial + SUM(postings)`): **84,000 minor units**.
-- Actual cached balance in `account_balances`: **98,700 minor units**.
-- **Result**: 14,700 minor units ($147.00) was lost from the account's recorded balance cache, proving that `READ COMMITTED` without explicit locking or version constraints is catastrophic for financial ledgers.
+`IsolationExperimentTest.demonstrateLostUpdateAnomalyInVariant0` (`ledger-service/src/test/java/com/ledgerline/ledger/isolation/IsolationExperimentTest.java`) runs the contended Variant-0 workload across 10 independent trials against fresh accounts each time, and **asserts** — not just logs — that the drift reproduces in at least 1 of the 10 trials. It logs the observed anomaly rate (`anomalies/trials`) and the total absolute drift on each CI run; those numbers are not reproduced here as fixed figures because a race condition's exact drift is nondeterministic run-to-run. The committed evidence for this scenario is the test itself and its pass/fail result in CI, not a hand-typed number in this document.
 
 ---
 
 ## 4. Benchmark Measurements
 
-The benchmark workload was executed using `bench/k6-isolation-test.js` under two distinct contention regimes:
-- **Low Contention**: 50 accounts, uniformly distributed random transfer pairs.
-- **High Contention**: 3 hot accounts (80% of all transfers touch these accounts).
+**Not yet run.** `bench/k6-isolation-test.js` exists and is intended to exercise this workload under low- and high-contention regimes across all four variants, but it has not actually been executed against a live deployment from this environment, and no raw k6 JSON output is committed to the repo. The table that previously appeared here listed specific throughput/latency/retry-rate figures with no corresponding run artifact — those numbers were unverifiable and have been removed rather than left in place or reissued as another guess.
 
-### Workload A: Low Contention (50 Accounts, 20 VUs, 30s)
-
-| Metric | Variant 0 (Broken) | Variant 1 (Pessimistic) | Variant 2 (Optimistic) | Variant 3 (Serializable) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Throughput (RPS)** | 1,420 rps | 1,280 rps | 1,210 rps | 1,090 rps |
-| **Latency p50** | 4.1 ms | 4.8 ms | 5.2 ms | 6.1 ms |
-| **Latency p95** | 12.4 ms | 14.2 ms | 16.8 ms | 21.5 ms |
-| **Latency p99** | 22.0 ms | 25.1 ms | 29.4 ms | 38.0 ms |
-| **Retry Rate** | 0.0% | 0.0% | 1.8% | 3.2% |
-| **Balance Invariant Drift**| **-18,400** | **0 (Zero)** | **0 (Zero)** | **0 (Zero)** |
-
-### Workload B: High Contention (3 Accounts, 20 VUs, 30s)
-
-| Metric | Variant 0 (Broken) | Variant 1 (Pessimistic) | Variant 2 (Optimistic) | Variant 3 (Serializable) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Throughput (RPS)** | 1,510 rps | **890 rps** | 410 rps | 280 rps |
-| **Latency p50** | 3.8 ms | 18.2 ms | 38.5 ms | 54.0 ms |
-| **Latency p95** | 11.2 ms | **38.4 ms** | 98.2 ms | 142.6 ms |
-| **Latency p99** | 19.5 ms | **52.1 ms** | 165.0 ms | 220.4 ms |
-| **Retry Rate** | 0.0% | **0.0%** | 48.7% | 61.3% |
-| **Balance Invariant Drift**| **-142,600** | **0 (Zero)** | **0 (Zero)** | **0 (Zero)** |
+To populate this section for real:
+1. Run `k6 run bench/k6-isolation-test.js --out json=bench/results/01-isolation-<date>.json` against a running `ledger-service` instance, once per contention regime.
+2. Commit the raw JSON output under `bench/results/`.
+3. Only then fill in this table, with each cell linking back to the specific committed JSON file it was read from.
 
 ---
 
 ## 5. Architectural Tradeoffs & Conclusions
 
-1. **Deterministic Pessimistic Locking (Variant 1) is the Superior Production Strategy**:
+These are theoretical/expected conclusions based on how each locking mechanism works, offered as the hypothesis the §4 benchmark run is meant to test — they are not yet confirmed by a committed measurement.
+
+1. **Deterministic Pessimistic Locking (Variant 1) is expected to be the strongest production default**:
    - Because locks are acquired in sorted UUID order, transactions queue cleanly at the row level without deadlocks.
-   - Zero aborts or retries are needed, resulting in the highest throughput and lowest p95 latency under high contention.
-2. **Optimistic Locking (Variant 2) Degrades Under Hot Accounts**:
-   - When multiple concurrent transactions modify the same account balance, only one can succeed on the first attempt; all others fail with optimistic locking failures, causing retry storms that saturate database connections and spike latency.
-3. **SERIALIZABLE (Variant 3) Has High Overhead on Hot Keys**:
-   - PostgreSQL SSI tracks read-write predicate locks (SIREAD). Under high contention on identical rows, PostgreSQL issues serialization failures (`40001`), requiring application-level retries.
+   - No aborts or retries are needed in principle, which should give it the highest throughput and lowest p95 latency under high contention — to be confirmed by §4.
+2. **Optimistic Locking (Variant 2) is expected to degrade under hot accounts**:
+   - When multiple concurrent transactions modify the same account balance, only one can succeed on the first attempt; the rest fail the version check and retry, which should show up as retry storms and increased latency under high contention — to be confirmed by §4.
+3. **SERIALIZABLE (Variant 3) is expected to have the highest overhead on hot keys**:
+   - PostgreSQL SSI tracks read-write predicate locks (SIREAD). Under high contention on identical rows, PostgreSQL is expected to issue more serialization failures (`40001`) than Variant 2 sees version conflicts, requiring more application-level retries — to be confirmed by §4.

@@ -8,28 +8,57 @@ import com.ledgerline.ledger.dto.AccountResponse;
 import com.ledgerline.ledger.dto.CreateAccountRequest;
 import com.ledgerline.ledger.dto.TransferEventPayload;
 import com.ledgerline.ledger.dto.TransferRequest;
+import com.ledgerline.ledger.relay.OutboxRelayPoller;
 import com.ledgerline.ledger.repository.OutboxRepository;
 import com.ledgerline.ledger.service.AccountService;
 import com.ledgerline.ledger.service.TransferService;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.mock.mockito.MockBean;
-import org.springframework.kafka.core.KafkaTemplate;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import org.testcontainers.containers.KafkaContainer;
+import org.testcontainers.utility.DockerImageName;
+import org.testcontainers.DockerClientFactory;
 
-import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.*;
 
+import static org.awaitility.Awaitility.await;
 import static org.junit.jupiter.api.Assertions.*;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.*;
 
+/**
+ * Exercises the async (outbox -> Kafka) failure paths against a REAL Kafka broker
+ * (Testcontainers), not a mock. The broker is paused (frozen) and unpaused mid-test to
+ * reproduce the "Kafka down" scenario the docs describe.
+ */
+@TestPropertySource(properties = "ledger.outbox.relay.enabled=true")
 class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
+
+    private static final KafkaContainer kafka =
+        new KafkaContainer(DockerImageName.parse("confluentinc/cp-kafka:7.6.1"));
+
+    @BeforeAll
+    static void startKafka() {
+        kafka.start();
+    }
+
+    @AfterAll
+    static void stopKafka() {
+        kafka.stop();
+    }
+
+    @DynamicPropertySource
+    static void kafkaProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.kafka.bootstrap-servers", kafka::getBootstrapServers);
+    }
 
     @Autowired
     private TransferService transferService;
@@ -44,35 +73,86 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
     private ObjectMapper objectMapper;
 
     @Autowired
+    private OutboxRelayPoller outboxRelayPoller;
+
+    @Autowired
     private PlatformTransactionManager transactionManager;
 
     @Autowired
     private org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
 
-    @MockBean
-    private KafkaTemplate<String, String> kafkaTemplate;
-
     @Test
-    @DisplayName("Kafka Down: Synchronous transfers succeed and outbox backlog accumulates")
-    void shouldAccumulateOutboxBacklogWhenKafkaIsDown() {
+    @DisplayName("Kafka Down: Synchronous transfers succeed, outbox backlog accumulates, and drains after the broker restarts")
+    void shouldAccumulateOutboxBacklogWhenKafkaIsDownAndDrainAfterRecovery() {
         AccountResponse from = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
         AccountResponse to = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
         fundAccount(from.id(), 50000L);
 
-        // When Kafka is down, sending to Kafka fails
-        when(kafkaTemplate.send(anyString(), anyString(), anyString()))
-            .thenReturn(CompletableFuture.failedFuture(new RuntimeException("Kafka Broker Unavailable (Simulated)")));
-
         long backlogBefore = outboxRepository.getBacklogCount();
 
-        // Transfer commits synchronously to DB without requiring synchronous Kafka
+        // Transfer commits synchronously to DB even though nothing has published it to Kafka yet.
         String key = "kafka-down-" + UUID.randomUUID();
-        assertDoesNotThrow(() -> {
-            transferService.transfer(key, new TransferRequest(from.id(), to.id(), 1500L, "USD"), null);
-        });
+        assertDoesNotThrow(() ->
+            transferService.transfer(key, new TransferRequest(from.id(), to.id(), 1500L, "USD"), null));
 
-        long backlogAfter = outboxRepository.getBacklogCount();
-        assertEquals(backlogBefore + 1, backlogAfter, "Outbox backlog must increment while Kafka is down");
+        long backlogAfterTransfer = outboxRepository.getBacklogCount();
+        assertEquals(backlogBefore + 1, backlogAfterTransfer, "Outbox backlog must record the new event before any publish attempt");
+
+        // Freeze the real broker process (SIGSTOP via docker pause) so it becomes unreachable without
+        // losing its container/port, then try to relay: the send must fail cleanly, leaving the row unpublished.
+        // (A hard stop+restart would reassign the mapped port and strand the already-initialized
+        // KafkaTemplate's producer client, so pause/unpause is used to simulate the outage instead.)
+        DockerClientFactory.instance().client().pauseContainerCmd(kafka.getContainerId()).exec();
+        try {
+            int published = outboxRelayPoller.pollAndPublish();
+            assertEquals(0, published, "No events should be marked published while the broker is unreachable");
+        } finally {
+            DockerClientFactory.instance().client().unpauseContainerCmd(kafka.getContainerId()).exec();
+        }
+
+        long backlogWhileDown = outboxRepository.getBacklogCount();
+        assertEquals(backlogAfterTransfer, backlogWhileDown, "Backlog must not shrink while Kafka is unreachable");
+
+        // Once the broker is back, the poller must drain the backlog.
+        await().atMost(Duration.ofSeconds(30)).untilAsserted(() -> {
+            int published = outboxRelayPoller.pollAndPublish();
+            long backlogAfterRecovery = outboxRepository.getBacklogCount();
+            assertTrue(published > 0 || backlogAfterRecovery < backlogWhileDown,
+                "Backlog must drain once Kafka recovers");
+            assertEquals(0, outboxRepository.getBacklogCount(), "Backlog must fully drain after broker recovery");
+        });
+    }
+
+    @Test
+    @DisplayName("Worker Crash Mid-Publish: event stays unpublished after the crash and is re-published on the next poll")
+    void shouldRepublishAfterSimulatedCrashBetweenSendAndMarkPublished() {
+        AccountResponse from = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
+        AccountResponse to = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));
+        fundAccount(from.id(), 50000L);
+
+        String key = "worker-crash-" + UUID.randomUUID();
+        transferService.transfer(key, new TransferRequest(from.id(), to.id(), 750L, "USD"), null);
+
+        long backlogBeforeCrash = outboxRepository.getBacklogCount();
+        assertTrue(backlogBeforeCrash > 0, "Expected an unpublished outbox row for the transfer");
+
+        // Simulate the relay crashing after the Kafka send succeeds but before markPublished() runs.
+        outboxRelayPoller.setSimulateCrashAfterSend(true);
+        assertThrows(Exception.class, () -> outboxRelayPoller.pollAndPublish(),
+            "The simulated crash must propagate out of the poll cycle");
+
+        long backlogAfterCrash = outboxRepository.getBacklogCount();
+        assertEquals(backlogBeforeCrash, backlogAfterCrash,
+            "The event must remain unpublished after the simulated crash (Kafka send happened, but markPublished did not)");
+
+        // Recovery: the next poll (crash disabled) must successfully re-send and mark it published.
+        outboxRelayPoller.setSimulateCrashAfterSend(false);
+        int published = outboxRelayPoller.pollAndPublish();
+        assertTrue(published > 0, "The relay must re-publish the event on the next poll after recovering from the crash");
+
+        long backlogAfterRecovery = outboxRepository.getBacklogCount();
+        assertEquals(backlogAfterCrash - published, backlogAfterRecovery,
+            "Backlog must decrease by exactly the number of events republished");
     }
 
     @Test
