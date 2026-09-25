@@ -17,11 +17,12 @@ public class AuditLogRepository {
 
     public void insertLog(AuditLogEntry entry) {
         String sql = """
-            INSERT INTO audit_log (actor, action, entity_id, at, details)
-            VALUES (?, ?, ?, ?, ?::jsonb)
+            INSERT INTO audit_log (actor, principal_id, action, entity_id, at, details)
+            VALUES (?, ?, ?, ?, ?, ?::jsonb)
             """;
         jdbcClient.sql(sql)
             .params(
+                entry.actor(),
                 entry.actor(),
                 entry.action(),
                 entry.entityId(),

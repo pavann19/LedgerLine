@@ -34,12 +34,12 @@ The architecture below is the deployment **as designed** in `deploy/main.tf` —
 
 Note: `t4g.*`/`db.t4g.*` instance families run on **Graviton2**, not Graviton3 (Graviton3 is used by the `c7g`/`m7g`/`r7g` families and newer). An earlier version of this document mislabeled the app host as Graviton3; corrected here.
 
-**Known gap in `deploy/main.tf` / `.github/workflows/deploy.yml` as they exist today**: the EC2 `user_data` block only installs Docker — it does not pull or run the `ledger-service`/`projection-service`/Kafka containers — and `deploy.yml` runs `terraform apply` but never builds/pushes an image, deploys the app onto the instance, or runs a smoke/load test. Actually producing the evidence below requires closing that gap first (have the deploy workflow build+push images and either SSH-deploy or use `user_data`/cloud-init to pull and run them), not just running `terraform apply` as-is.
+The deployment path is now implemented but remains unexecuted. The manual workflow refuses to apply infrastructure unless it can verify an existing ACTUAL-cost AWS Budget notification, builds and pushes both images, supplies the JWT secret, runs smoke and k6 checks, queries RDS through SSM, records available Cost Explorer data, and destroys the stack in an `always()` step. Current status and missing claims are recorded in [`bench/results/03-aws-run-status.json`](../../bench/results/03-aws-run-status.json).
 
 ## To produce real evidence for this section
 
-1. Close the deploy-completeness gap above so `terraform apply` + the app's startup actually results in a reachable `ledger-service` and `projection-service`.
-2. Tag a release and let `.github/workflows/deploy.yml` run: build → test → push image → `terraform apply`.
+1. Configure the required GitHub secrets and create the named AWS Budget alert.
+2. Explicitly authorize pushing this revision, then manually dispatch `.github/workflows/deploy.yml`.
 3. Run `bench/smoke-test.sh` against the public URL from the Terraform output; commit its output/log.
 4. Run `bench/k6-cloud-load.js` against the public URL; commit the raw JSON output (`--out json=...`) under `bench/results/`.
 5. Run the four invariant SQL queries (conservation of money, no negative balances, postings-sum-equals-balance, zero-sum-per-transaction) directly against the RDS instance; commit the query output alongside the k6 JSON.

@@ -16,6 +16,7 @@ import com.ledgerline.ledger.repository.OutboxRepository;
 import com.ledgerline.ledger.repository.PostingRepository;
 import com.ledgerline.ledger.repository.TransactionRepository;
 import org.springframework.stereotype.Component;
+import com.ledgerline.ledger.security.CurrentPrincipal;
 
 import java.time.Instant;
 import java.util.Arrays;
@@ -32,6 +33,7 @@ public class TransferCoreSupport {
     private final OutboxRepository outboxRepository;
     private final AuditLogRepository auditLogRepository;
     private final ObjectMapper objectMapper;
+    private final CurrentPrincipal currentPrincipal;
 
     public TransferCoreSupport(
         AccountRepository accountRepository,
@@ -39,7 +41,8 @@ public class TransferCoreSupport {
         PostingRepository postingRepository,
         OutboxRepository outboxRepository,
         AuditLogRepository auditLogRepository,
-        ObjectMapper objectMapper
+        ObjectMapper objectMapper,
+        CurrentPrincipal currentPrincipal
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
@@ -47,6 +50,7 @@ public class TransferCoreSupport {
         this.outboxRepository = outboxRepository;
         this.auditLogRepository = auditLogRepository;
         this.objectMapper = objectMapper;
+        this.currentPrincipal = currentPrincipal;
     }
 
     public void validateTransferRequest(TransferRequest request) {
@@ -170,7 +174,7 @@ public class TransferCoreSupport {
         // 4. Insert Audit Log
         auditLogRepository.insertLog(new AuditLogEntry(
             null,
-            "SYSTEM",
+            currentPrincipal.id(),
             "TRANSFER_POSTED",
             transactionId.toString(),
             now,

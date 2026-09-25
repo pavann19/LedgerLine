@@ -20,18 +20,22 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.CLOUD_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.CLOUD_URL || 'http://localhost:8080/api/v1';
+const ACCESS_TOKEN = __ENV.ACCESS_TOKEN;
+const ACCOUNT_A = __ENV.ACCOUNT_A;
+const ACCOUNT_B = __ENV.ACCOUNT_B;
+
+if (!ACCESS_TOKEN || !ACCOUNT_A || !ACCOUNT_B) {
+  throw new Error('ACCESS_TOKEN, ACCOUNT_A, and ACCOUNT_B are required');
+}
 
 export default function () {
-  const accountA = '00000000-0000-0000-0000-000000000001';
-  const accountB = '00000000-0000-0000-0000-000000000002';
-
   const amount = Math.floor(Math.random() * 100) + 10;
   const isReversal = Math.random() > 0.5;
 
   const payload = JSON.stringify({
-    fromAccountId: isReversal ? accountB : accountA,
-    toAccountId: isReversal ? accountA : accountB,
+    fromAccountId: isReversal ? ACCOUNT_B : ACCOUNT_A,
+    toAccountId: isReversal ? ACCOUNT_A : ACCOUNT_B,
     amountMinor: amount,
     currency: 'USD',
   });
@@ -41,6 +45,7 @@ export default function () {
     headers: {
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
     },
   });
 

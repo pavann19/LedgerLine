@@ -13,6 +13,8 @@ import java.util.UUID;
 @Repository
 public class TransactionRepository {
 
+    private static final char PRINCIPAL_KEY_SEPARATOR = '\u001F';
+
     private final JdbcClient jdbcClient;
 
     private final RowMapper<Transaction> rowMapper = (rs, rowNum) -> new Transaction(
@@ -28,14 +30,16 @@ public class TransactionRepository {
     }
 
     public void insertTransaction(Transaction transaction) {
+        ScopedIdempotencyKey scopedKey = splitScopedKey(transaction.idempotencyKey());
         String sql = """
-            INSERT INTO transactions (id, idempotency_key, request_hash, status, created_at)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO transactions (id, principal_id, idempotency_key, request_hash, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
             """;
         jdbcClient.sql(sql)
             .params(
                 transaction.id(),
-                transaction.idempotencyKey(),
+                scopedKey.principalId(),
+                scopedKey.key(),
                 transaction.requestHash(),
                 transaction.status().name(),
                 Timestamp.from(transaction.createdAt())
@@ -44,12 +48,16 @@ public class TransactionRepository {
     }
 
     public Optional<Transaction> findByIdempotencyKey(String idempotencyKey) {
+        ScopedIdempotencyKey scopedKey = splitScopedKey(idempotencyKey);
         String sql = """
             SELECT id, idempotency_key, request_hash, status, created_at 
             FROM transactions 
-            WHERE idempotency_key = ?
+            WHERE principal_id = ? AND idempotency_key = ?
             """;
-        return jdbcClient.sql(sql).param(idempotencyKey).query(rowMapper).optional();
+        return jdbcClient.sql(sql)
+            .params(scopedKey.principalId(), scopedKey.key())
+            .query(rowMapper)
+            .optional();
     }
 
     public Optional<Transaction> findById(UUID id) {
@@ -60,4 +68,14 @@ public class TransactionRepository {
             """;
         return jdbcClient.sql(sql).param(id).query(rowMapper).optional();
     }
+
+    private ScopedIdempotencyKey splitScopedKey(String value) {
+        int separator = value.indexOf(PRINCIPAL_KEY_SEPARATOR);
+        if (separator < 0) {
+            return new ScopedIdempotencyKey("LEGACY_SYSTEM", value);
+        }
+        return new ScopedIdempotencyKey(value.substring(0, separator), value.substring(separator + 1));
+    }
+
+    private record ScopedIdempotencyKey(String principalId, String key) {}
 }

@@ -125,6 +125,21 @@ public class ProjectionRepository {
             .list();
     }
 
+    public List<StatementViewEntry> getStatementPage(UUID accountId, int limit, Long beforeId) {
+        if (beforeId == null) {
+            return jdbcClient.sql("""
+                SELECT id, account_id, transaction_id, amount_minor, running_balance_minor, currency, created_at
+                FROM statement_view WHERE account_id = ? ORDER BY id DESC LIMIT ?
+                """).params(accountId, limit).query(statementRowMapper).list();
+        }
+        String sql = """
+            SELECT id, account_id, transaction_id, amount_minor, running_balance_minor, currency, created_at
+            FROM statement_view WHERE account_id = ? AND id < ?
+            ORDER BY id DESC LIMIT ?
+            """;
+        return jdbcClient.sql(sql).params(accountId, beforeId, limit).query(statementRowMapper).list();
+    }
+
     public Optional<DailyAccountSummary> getDailySummary(UUID accountId, LocalDate date) {
         String sql = """
             SELECT account_id, summary_date, opening_balance_minor, closing_balance_minor,

@@ -125,6 +125,24 @@ class IdempotencyIntegrationTest extends BaseIntegrationTest {
         assertEquals(49000L, fromAfter.balanceMinor());
     }
 
+    @Test
+    @DisplayName("Idempotency: The same external key is independent across principals")
+    void shouldScopeTheSameExternalKeyByPrincipal() {
+        AccountResponse from = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER), "customer-a");
+        AccountResponse to = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER), "customer-a");
+        fundAccount(from.id(), 10000L);
+
+        String key = "shared-" + UUID.randomUUID();
+        TransferRequest request = new TransferRequest(from.id(), to.id(), 1000L, "USD");
+        TransferResponse first = transferService.transfer(key, request, null, "customer-a", false);
+        TransferResponse second = transferService.transfer(key, request, null, "operator-b", true);
+
+        assertNotEquals(first.transactionId(), second.transactionId());
+        Integer rows = jdbcClient.sql("SELECT COUNT(*) FROM transactions WHERE idempotency_key = ? AND principal_id IN ('customer-a', 'operator-b')")
+            .param(key).query(Integer.class).single();
+        assertEquals(2, rows);
+    }
+
     private void fundAccount(UUID accountId, long amountMinor) {
         jdbcClient.sql("UPDATE account_balances SET balance_minor = balance_minor + ? WHERE account_id = ?")
             .params(amountMinor, accountId)

@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rendered by Terraform's templatefile() with: aws_region, ecr_registry, image_tag,
-# db_endpoint, db_password. Runs once at EC2 first boot to actually stand up the app,
+# db_endpoint, db_password, jwt_secret. Runs once at EC2 first boot to actually stand up the app,
 # not just install Docker.
 set -euxo pipefail
 
@@ -53,6 +53,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ledger_admin
       SPRING_DATASOURCE_PASSWORD: "${db_password}"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: "${jwt_secret}"
       LEDGER_OUTBOX_RELAY_ENABLED: "true"
       LEDGER_OUTBOX_RELAY_DELAY_MS: "500"
     depends_on:
@@ -69,6 +70,7 @@ services:
       SPRING_DATASOURCE_USERNAME: ledger_admin
       SPRING_DATASOURCE_PASSWORD: "${db_password}"
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      JWT_SECRET: "${jwt_secret}"
     depends_on:
       - kafka
     restart: unless-stopped
