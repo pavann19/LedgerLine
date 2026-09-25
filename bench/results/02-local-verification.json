@@ -1,0 +1,46 @@
+{
+  "recorded_at": "2026-09-25T10:36:50Z",
+  "environment": {
+    "os": "Windows with Docker Desktop",
+    "docker_server": "29.7.2",
+    "java": "23.0.2",
+    "application_target": "Java 21",
+    "spring_boot": "3.5.16"
+  },
+  "ledger_tests": {
+    "command": ".\\mvnw.cmd clean verify -Pcoverage '-Dtest=!AsyncFailureAndResilienceTest' '-Dsurefire.failIfNoSpecifiedTests=false' --batch-mode",
+    "tests": 19,
+    "failures": 0,
+    "errors": 0,
+    "excluded": ["AsyncFailureAndResilienceTest"],
+    "line_coverage_percent": 72.87,
+    "branch_coverage_percent": 46.71
+  },
+  "projection_tests": {
+    "tests": 1,
+    "passed": 0,
+    "errors": 1,
+    "status": "LOCAL_ENVIRONMENT_FAILURE",
+    "error": "Kafka client could not create the Windows JDK selector: Unable to establish loopback connection"
+  },
+  "images": {
+    "ledger": {
+      "digest": "sha256:f52ca9c65a6c2b412a849dbe6f3139a137450f85ebb28019fdc1f620f0590ca1",
+      "sbom_packages": 178,
+      "trivy_high": 1,
+      "trivy_critical": 3
+    },
+    "projection": {
+      "digest": "sha256:f347c2e477776221ade443f0c6162d91b747e89fba227b8aec6d3af9b7290ca1",
+      "sbom_packages": 178,
+      "trivy_high": 1,
+      "trivy_critical": 3
+    }
+  },
+  "evidence": [
+    "02-ledger-image.spdx.json",
+    "02-projection-image.spdx.json",
+    "02-ledger-trivy.json",
+    "02-projection-trivy.json"
+  ]
+}

@@ -39,6 +39,8 @@ management:
       application: ${spring.application.name}
 
 ledger:
+  security:
+    jwt-secret: ${JWT_SECRET}
   transfer:
     default-variant: VARIANT_1_PESSIMISTIC
   kafka:

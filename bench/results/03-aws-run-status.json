@@ -1,0 +1,21 @@
+{
+  "recorded_at": "2026-09-25T10:36:50Z",
+  "status": "NOT_RUN",
+  "reason": "The deployment workflow requires a confirmed AWS budget alert and GitHub repository secrets. Running it also requires a pushed workflow revision, which was not authorized.",
+  "required_secrets": [
+    "AWS_ACCESS_KEY_ID",
+    "AWS_SECRET_ACCESS_KEY",
+    "AWS_ACCOUNT_ID",
+    "AWS_BUDGET_NAME",
+    "RDS_DB_PASSWORD",
+    "JWT_SECRET",
+    "JWT_ACCESS_TOKEN"
+  ],
+  "claims_not_available": [
+    "AWS smoke-test result",
+    "AWS k6 result",
+    "RDS invariant result",
+    "real AWS cost",
+    "same-day destroy timestamp"
+  ]
+}

@@ -57,6 +57,21 @@ public class PostingRepository {
             .list();
     }
 
+    public List<Posting> findPageByAccountId(UUID accountId, int limit, Long beforeId) {
+        if (beforeId == null) {
+            return jdbcClient.sql("""
+                SELECT id, transaction_id, account_id, amount_minor, currency, created_at
+                FROM postings WHERE account_id = ? ORDER BY id DESC LIMIT ?
+                """).params(accountId, limit).query(rowMapper).list();
+        }
+        String sql = """
+            SELECT id, transaction_id, account_id, amount_minor, currency, created_at
+            FROM postings WHERE account_id = ? AND id < ?
+            ORDER BY id DESC LIMIT ?
+            """;
+        return jdbcClient.sql(sql).params(accountId, beforeId, limit).query(rowMapper).list();
+    }
+
     public List<Posting> findByTransactionId(UUID transactionId) {
         String sql = """
             SELECT id, transaction_id, account_id, amount_minor, currency, created_at 

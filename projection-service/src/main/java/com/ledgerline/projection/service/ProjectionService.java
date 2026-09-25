@@ -3,6 +3,7 @@ package com.ledgerline.projection.service;
 import com.ledgerline.projection.model.DailyAccountSummary;
 import com.ledgerline.projection.model.StatementViewEntry;
 import com.ledgerline.projection.model.TransferEventPayload;
+import com.ledgerline.projection.model.CursorPage;
 import com.ledgerline.projection.repository.ProcessedEventsRepository;
 import com.ledgerline.projection.repository.ProjectionRepository;
 import org.slf4j.Logger;
@@ -90,6 +91,22 @@ public class ProjectionService {
     @Transactional(readOnly = true)
     public List<StatementViewEntry> getStatement(UUID accountId, int limit, int offset) {
         return projectionRepository.getStatement(accountId, limit, offset);
+    }
+
+    @Transactional(readOnly = true)
+    public CursorPage<StatementViewEntry> getStatement(UUID accountId, int limit, String cursor) {
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100");
+        Long beforeId = cursor == null ? null : decodeCursor(cursor);
+        var rows = projectionRepository.getStatementPage(accountId, limit + 1, beforeId);
+        boolean hasMore = rows.size() > limit;
+        var page = rows.stream().limit(limit).toList();
+        String next = hasMore ? java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(Long.toString(page.getLast().id()).getBytes(java.nio.charset.StandardCharsets.UTF_8)) : null;
+        return new CursorPage<>(page, next);
+    }
+
+    private long decodeCursor(String cursor) {
+        try { return Long.parseLong(new String(java.util.Base64.getUrlDecoder().decode(cursor), java.nio.charset.StandardCharsets.UTF_8)); }
+        catch (RuntimeException e) { throw new IllegalArgumentException("Invalid cursor"); }
     }
 
     @Transactional(readOnly = true)

@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/ledgerline/ledgerline/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
 [![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.4.x-brightgreen.svg)](https://spring.io/projects/spring-boot)
+[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-brightgreen.svg)](https://spring.io/projects/spring-boot)
 [![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
 [![Kafka](https://img.shields.io/badge/Kafka-KRaft-black.svg)](https://kafka.apache.org/)
 
@@ -31,7 +31,7 @@ flowchart TD
     end
 
     subgraph LedgerWrite["ledger-service (Write Core)"]
-        API["TransferController<br/>Idempotency & Hash Check"]
+        API["/api/v1 OAuth2 Resource Server<br/>CUSTOMER / OPERATOR"]
         Strategy["TransferExecutionStrategy<br/>(Pessimistic / Optimistic / Serializable)"]
         DBTx["Atomic Single DB Transaction"]
         Relay["Outbox Relay Poller<br/>(SELECT ... FOR UPDATE SKIP LOCKED)"]
@@ -39,7 +39,7 @@ flowchart TD
 
     subgraph Postgres["PostgreSQL 16 Engine"]
         T_Acc["accounts"]
-        T_Tx["transactions<br/>UNIQUE(idempotency_key)"]
+        T_Tx["transactions<br/>UNIQUE(principal_id, idempotency_key)"]
         T_Post["postings<br/>Deferred Constraint Trigger<br/>SUM(amount_minor) = 0"]
         T_Bal["account_balances<br/>CHECK(balance_minor >= 0)"]
         T_Outbox["outbox<br/>JSONB Events"]
@@ -57,7 +57,7 @@ flowchart TD
         Summary["daily_account_summary<br/>Inflows, Outflows & Balances"]
     end
 
-    C1 -->|"POST /transfers<br/>(Idempotency-Key)"| API
+    C1 -->|"Bearer JWT + POST /api/v1/transfers<br/>(Idempotency-Key)"| API
     API --> Strategy
     Strategy --> DBTx
     DBTx --> T_Tx
@@ -91,8 +91,8 @@ Eliminating circular lock dependencies guarantees zero database deadlocks under 
 Every standard `CUSTOMER` account balance is guarded by a PostgreSQL check constraint:
 $$\text{CHECK} \ (\text{account\_type} = \text{'OVERDRAFT'} \lor \text{balance\_minor} \ge 0)$$
 
-### 4. Idempotency & Replay Safety
-- Primary key / unique constraint on `transactions.idempotency_key`.
+### 4. Principal-Scoped Idempotency & Replay Safety
+- Composite unique constraint on `(transactions.principal_id, transactions.idempotency_key)` allows two principals to use the same external key without collision.
 - Concurrent duplicate requests block on insertion, and one succeeds while the duplicate returns the original cached result.
 - Payload integrity: SHA-256 hash comparison ensures that reusing an idempotency key with different parameters immediately raises `HTTP 422 Unprocessable Entity`.
 
@@ -159,12 +159,13 @@ ledgerline/
 ### Prerequisites
 - Java 21+
 - Docker & Docker Compose
+- A JWT signed with `JWT_SECRET`, containing `sub` and `roles` (`CUSTOMER` or `OPERATOR`). Projection access for customers also requires an `accounts` claim containing permitted account UUIDs.
 
 ### Start the Infrastructure & Services
 ```bash
 # 1. Start PostgreSQL, Kafka, Toxiproxy, Prometheus, Grafana, and Ledgerline services
 cd deploy
-docker compose up -d
+JWT_SECRET='replace-with-at-least-32-random-bytes' docker compose up -d
 
 # 2. Verify health
 curl -s http://localhost:8080/actuator/health | jq .
@@ -172,8 +173,10 @@ curl -s http://localhost:8081/actuator/health | jq .
 
 # 3. Run automated smoke tests
 cd ../bench
-bash smoke-test.sh
+ACCESS_TOKEN="$JWT_ACCESS_TOKEN" bash smoke-test.sh
 ```
+
+All business endpoints are under `/api/v1`. OpenAPI JSON is available at `/v3/api-docs` and Swagger UI at `/swagger-ui.html`. Application and security errors use `application/problem+json` (RFC 7807). Account postings and projection statements use `limit` plus an opaque `cursor` rather than offset pagination.
 
 ---
 
@@ -234,3 +237,11 @@ Prometheus metrics exposed at `http://localhost:8080/actuator/prometheus`:
 1. **Single-Currency Transfers**: Currently, transfers require matching currencies between accounts. Multi-currency support can be implemented via an explicit FX posting pair with an intermediary exchange account.
 2. **Reversals & Holds**: Two-phase authorisations (auth $\to$ capture) can be modeled as temporary balance holds preceding final postings.
 3. **Partitioned Outbox**: For workloads exceeding 50,000 transfers/sec, outbox table partitioning by hash or date allows concurrent bulk drain workers.
+
+---
+
+## 11. CI, Images, and Evidence
+
+CI runs the Maven verification suite with JaCoCo reporting, builds both Docker images, emits SPDX SBOMs, and runs a blocking HIGH/CRITICAL Trivy scan. The recorded local run in [`bench/results/02-local-verification.json`](bench/results/02-local-verification.json) has 19 passing ledger tests, 72.87% line coverage, and 178 SBOM packages per image. The committed Trivy reports currently contain one HIGH and three CRITICAL fixed-version findings per image; these are open findings, not a clean-scan claim.
+
+The one-shot AWS workflow is manual and budget-gated. It verifies an existing ACTUAL-cost budget alert, deploys using GitHub secrets, runs smoke and k6 checks, queries RDS invariants through SSM, captures available Cost Explorer data, and destroys the stack in an `always()` step. It has not been executed in this revision because doing so requires a pushed workflow plus configured repository secrets, while this work is local-only. See [`bench/results/03-aws-run-status.json`](bench/results/03-aws-run-status.json). Portfolio and resume wording is derived only from these result files: [`docs/portfolio-card.md`](docs/portfolio-card.md) and [`docs/resume-line.md`](docs/resume-line.md).

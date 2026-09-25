@@ -37,6 +37,12 @@ variable "image_tag" {
   default     = "latest"
 }
 
+variable "jwt_secret" {
+  type        = string
+  description = "HMAC secret used to validate OAuth2 bearer JWTs"
+  sensitive   = true
+}
+
 data "aws_caller_identity" "current" {}
 
 locals {
@@ -242,6 +248,7 @@ resource "aws_instance" "app_host" {
     image_tag    = var.image_tag
     db_endpoint  = aws_db_instance.postgres.endpoint
     db_password  = var.db_password
+    jwt_secret   = var.jwt_secret
   })
 
   tags = {
@@ -279,4 +286,9 @@ output "ledger_service_url" {
 output "db_endpoint" {
   value       = aws_db_instance.postgres.endpoint
   description = "RDS PostgreSQL endpoint"
+}
+
+output "app_instance_id" {
+  value       = aws_instance.app_host.id
+  description = "EC2 instance id used for SSM smoke and RDS invariant checks"
 }

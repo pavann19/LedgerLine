@@ -14,6 +14,7 @@ import com.ledgerline.ledger.service.AccountService;
 import com.ledgerline.ledger.service.TransferService;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -39,7 +40,7 @@ import static org.junit.jupiter.api.Assertions.*;
  * (Testcontainers), not a mock. The broker is paused (frozen) and unpaused mid-test to
  * reproduce the "Kafka down" scenario the docs describe.
  */
-@TestPropertySource(properties = "ledger.outbox.relay.enabled=true")
+@TestPropertySource(properties = {"ledger.outbox.relay.enabled=true", "ledger.outbox.relay.delay-ms=3600000"})
 class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
 
     private static final KafkaContainer kafka =
@@ -80,6 +81,12 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
 
     @Autowired
     private org.springframework.jdbc.core.simple.JdbcClient jdbcClient;
+
+    @BeforeEach
+    void isolateOutboxEvidence() {
+        jdbcClient.sql("UPDATE outbox SET published_at = clock_timestamp() WHERE published_at IS NULL").update();
+        outboxRelayPoller.setSimulateCrashAfterSend(false);
+    }
 
     @Test
     @DisplayName("Kafka Down: Synchronous transfers succeed, outbox backlog accumulates, and drains after the broker restarts")

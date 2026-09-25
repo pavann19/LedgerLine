@@ -7,6 +7,8 @@ import com.ledgerline.ledger.domain.AuditLogEntry;
 import com.ledgerline.ledger.dto.AccountResponse;
 import com.ledgerline.ledger.dto.CreateAccountRequest;
 import com.ledgerline.ledger.dto.PostingDto;
+import com.ledgerline.ledger.dto.CursorPage;
+import org.springframework.security.access.AccessDeniedException;
 import com.ledgerline.ledger.exception.AccountNotFoundException;
 import com.ledgerline.ledger.repository.AccountBalanceRepository;
 import com.ledgerline.ledger.repository.AccountRepository;
@@ -41,6 +43,11 @@ public class AccountService {
 
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request) {
+        return createAccount(request, "SYSTEM");
+    }
+
+    @Transactional
+    public AccountResponse createAccount(CreateAccountRequest request, String principalId) {
         UUID accountId = UUID.randomUUID();
         Instant now = Instant.now();
         String currency = request.currency().trim().toUpperCase();
@@ -51,7 +58,8 @@ public class AccountService {
             request.type(),
             AccountStatus.ACTIVE,
             now,
-            0L
+            0L,
+            principalId
         );
         accountRepository.createAccount(account);
 
@@ -65,7 +73,7 @@ public class AccountService {
 
         auditLogRepository.insertLog(new AuditLogEntry(
             null,
-            "SYSTEM",
+            principalId,
             "ACCOUNT_CREATED",
             accountId.toString(),
             now,
@@ -84,8 +92,14 @@ public class AccountService {
 
     @Transactional(readOnly = true)
     public AccountResponse getAccount(UUID accountId) {
+        return getAccount(accountId, "SYSTEM", true);
+    }
+
+    @Transactional(readOnly = true)
+    public AccountResponse getAccount(UUID accountId, String principalId, boolean operator) {
         Account account = accountRepository.findById(accountId)
             .orElseThrow(() -> new AccountNotFoundException(accountId));
+        requireOwnership(account, principalId, operator);
 
         AccountBalance balance = balanceRepository.findById(accountId)
             .orElseThrow(() -> new AccountNotFoundException(accountId));
@@ -115,5 +129,27 @@ public class AccountService {
                 p.createdAt()
             ))
             .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public CursorPage<PostingDto> getPostings(UUID accountId, int limit, String cursor, String principalId, boolean operator) {
+        if (limit < 1 || limit > 100) throw new IllegalArgumentException("limit must be between 1 and 100");
+        Account account = accountRepository.findById(accountId).orElseThrow(() -> new AccountNotFoundException(accountId));
+        requireOwnership(account, principalId, operator);
+        Long beforeId = cursor == null ? null : decodeCursor(cursor);
+        var rows = postingRepository.findPageByAccountId(accountId, limit + 1, beforeId);
+        boolean hasMore = rows.size() > limit;
+        var page = rows.stream().limit(limit).map(p -> new PostingDto(p.id(), p.accountId(), p.amountMinor(), p.currency(), p.createdAt())).toList();
+        String next = hasMore ? java.util.Base64.getUrlEncoder().withoutPadding().encodeToString(Long.toString(page.getLast().id()).getBytes(java.nio.charset.StandardCharsets.UTF_8)) : null;
+        return new CursorPage<>(page, next);
+    }
+
+    private long decodeCursor(String cursor) {
+        try { return Long.parseLong(new String(java.util.Base64.getUrlDecoder().decode(cursor), java.nio.charset.StandardCharsets.UTF_8)); }
+        catch (RuntimeException e) { throw new IllegalArgumentException("Invalid cursor"); }
+    }
+
+    private void requireOwnership(Account account, String principalId, boolean operator) {
+        if (!operator && !account.ownerPrincipal().equals(principalId)) throw new AccessDeniedException("Account is not owned by the authenticated principal");
     }
 }

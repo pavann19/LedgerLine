@@ -9,5 +9,6 @@ public record Account(
     AccountType type,
     AccountStatus status,
     Instant createdAt,
-    long version
+    long version,
+    String ownerPrincipal
 ) {}

@@ -17,7 +17,8 @@ import subprocess
 import sys
 import urllib.request
 
-BASE_URL = os.environ.get("BASE_URL", "http://localhost:8080")
+BASE_URL = os.environ.get("BASE_URL", "http://localhost:8080/api/v1")
+ACCESS_TOKEN = os.environ["ACCESS_TOKEN"]
 DB_CONTAINER = os.environ.get("DB_CONTAINER", "ledgerline-postgres")
 DB_NAME = os.environ.get("DB_NAME", "ledgerline")
 DB_USER = os.environ.get("DB_USER", "postgres")
@@ -30,7 +31,7 @@ def create_account():
     req = urllib.request.Request(
         f"{BASE_URL}/accounts",
         data=json.dumps({"currency": "USD", "type": "CUSTOMER"}).encode(),
-        headers={"Content-Type": "application/json"},
+        headers={"Content-Type": "application/json", "Authorization": f"Bearer {ACCESS_TOKEN}"},
         method="POST",
     )
     with urllib.request.urlopen(req, timeout=10) as resp:

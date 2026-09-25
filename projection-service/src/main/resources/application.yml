@@ -22,6 +22,12 @@ spring:
 server:
   port: ${PORT:8081}
 
+projection:
+  security:
+    jwt-secret: ${JWT_SECRET}
+  kafka:
+    transfers-topic: ledger.transfers.v1
+
 management:
   endpoints:
     web:
@@ -30,7 +36,3 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
-
-projection:
-  kafka:
-    transfers-topic: ledger.transfers.v1

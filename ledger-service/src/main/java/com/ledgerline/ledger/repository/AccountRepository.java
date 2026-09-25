@@ -22,7 +22,8 @@ public class AccountRepository {
         AccountType.valueOf(rs.getString("type")),
         AccountStatus.valueOf(rs.getString("status")),
         rs.getTimestamp("created_at").toInstant(),
-        rs.getLong("version")
+        rs.getLong("version"),
+        rs.getString("owner_principal")
     );
 
     public AccountRepository(JdbcClient jdbcClient) {
@@ -31,8 +32,8 @@ public class AccountRepository {
 
     public void createAccount(Account account) {
         String sql = """
-            INSERT INTO accounts (id, currency, type, status, created_at, version)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO accounts (id, currency, type, status, created_at, version, owner_principal)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
             """;
         jdbcClient.sql(sql)
             .params(
@@ -41,13 +42,14 @@ public class AccountRepository {
                 account.type().name(),
                 account.status().name(),
                 Timestamp.from(account.createdAt()),
-                account.version()
+                account.version(),
+                account.ownerPrincipal()
             )
             .update();
     }
 
     public Optional<Account> findById(UUID id) {
-        String sql = "SELECT id, currency, type, status, created_at, version FROM accounts WHERE id = ?";
+        String sql = "SELECT id, currency, type, status, created_at, version, owner_principal FROM accounts WHERE id = ?";
         return jdbcClient.sql(sql).param(id).query(rowMapper).optional();
     }
 

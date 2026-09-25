@@ -1,9 +1,7 @@
 name: Deploy to Cloud
 
 on:
-  push:
-    tags:
-      - 'v*'
+  workflow_dispatch:
 
 jobs:
   deploy:
@@ -37,6 +35,21 @@ jobs:
         working-directory: deploy
         run: terraform init
 
+      - name: Verify required budget alert exists
+        env:
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+          AWS_BUDGET_NAME: ${{ secrets.AWS_BUDGET_NAME }}
+        run: |
+          test -n "$AWS_ACCOUNT_ID" && test -n "$AWS_BUDGET_NAME"
+          aws budgets describe-budget --account-id "$AWS_ACCOUNT_ID" --budget-name "$AWS_BUDGET_NAME" --output json \
+            | tee bench/results/03-budget-preflight.json
+          # Backticks are JMESPath literals, not shell substitutions.
+          # shellcheck disable=SC2016
+          aws budgets describe-notifications-for-budget --account-id "$AWS_ACCOUNT_ID" --budget-name "$AWS_BUDGET_NAME" \
+            --query 'Notifications[?NotificationType==`ACTUAL`]' --output json \
+            | tee bench/results/03-budget-notifications.json
+          test "$(jq length bench/results/03-budget-notifications.json)" -gt 0
+
       # Phase 1: create just the ECR repos (idempotent, safe to re-run) so there's somewhere
       # to push the images to before the EC2 instance's user_data tries to pull them.
       - name: Terraform Apply (ECR repositories only)
@@ -44,6 +57,7 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -target=aws_ecr_repository.ledger_service \
             -target=aws_ecr_repository.projection_service
 
@@ -65,7 +79,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.ecr_repos.outputs.ledger_repo_url }}:${{ github.ref_name }}
+            ${{ steps.ecr_repos.outputs.ledger_repo_url }}:${{ github.sha }}
             ${{ steps.ecr_repos.outputs.ledger_repo_url }}:latest
 
       - name: Build & Push projection-service image (linux/arm64)
@@ -76,7 +90,7 @@ jobs:
           platforms: linux/arm64
           push: true
           tags: |
-            ${{ steps.ecr_repos.outputs.projection_repo_url }}:${{ github.ref_name }}
+            ${{ steps.ecr_repos.outputs.projection_repo_url }}:${{ github.sha }}
             ${{ steps.ecr_repos.outputs.projection_repo_url }}:latest
 
       # Phase 2: full apply — EC2 user_data is templated with the image tag just pushed above,
@@ -86,8 +100,77 @@ jobs:
         run: |
           terraform apply -auto-approve \
             -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
-            -var="image_tag=${{ github.ref_name }}"
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -var="image_tag=${{ github.sha }}"
 
       - name: Terraform Outputs
         working-directory: deploy
         run: terraform output
+
+      - name: Wait for services and run smoke test
+        id: smoke
+        env:
+          ACCESS_TOKEN: ${{ secrets.JWT_ACCESS_TOKEN }}
+        run: |
+          APP_IP=$(terraform -chdir=deploy output -raw app_public_ip)
+          for attempt in $(seq 1 40); do
+            echo "Health check attempt ${attempt}/40"
+            curl -fsS "http://${APP_IP}:8080/actuator/health" && break
+            sleep 15
+          done
+          bash bench/smoke-test.sh "http://${APP_IP}:8080" "http://${APP_IP}:8081" | tee bench/results/03-smoke.log
+          {
+            echo "account_a=$(grep 'Created Account A:' bench/results/03-smoke.log | awk '{print $4}')"
+            echo "account_b=$(grep 'Created Account B:' bench/results/03-smoke.log | awk '{print $4}')"
+            echo "cloud_url=http://${APP_IP}:8080/api/v1"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Set up k6
+        uses: grafana/setup-k6-action@v1
+
+      - name: Run cloud load test
+        env:
+          ACCESS_TOKEN: ${{ secrets.JWT_ACCESS_TOKEN }}
+          ACCOUNT_A: ${{ steps.smoke.outputs.account_a }}
+          ACCOUNT_B: ${{ steps.smoke.outputs.account_b }}
+          CLOUD_URL: ${{ steps.smoke.outputs.cloud_url }}
+        run: k6 run bench/k6-cloud-load.js --out json=bench/results/03-k6-cloud.json
+
+      - name: Query RDS invariants through SSM
+        env:
+          PGPASSWORD: ${{ secrets.RDS_DB_PASSWORD }}
+        run: |
+          INSTANCE_ID=$(terraform -chdir=deploy output -raw app_instance_id)
+          DB_ENDPOINT=$(terraform -chdir=deploy output -raw db_endpoint)
+          SQL_B64=$(base64 -w0 bench/rds-invariants.sql)
+          COMMAND_ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name AWS-RunShellScript \
+            --parameters "commands=echo $SQL_B64 | base64 -d > /tmp/invariants.sql,PGPASSWORD='$PGPASSWORD' psql -h '$DB_ENDPOINT' -U ledger_admin -d ledgerline -f /tmp/invariants.sql" \
+            --query 'Command.CommandId' --output text)
+          aws ssm wait command-executed --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID"
+          aws ssm get-command-invocation --command-id "$COMMAND_ID" --instance-id "$INSTANCE_ID" \
+            --output json | tee bench/results/03-rds-invariants.json
+
+      - name: Record available AWS cost data
+        if: always()
+        run: |
+          START=$(date -u +%F)
+          END=$(date -u -d tomorrow +%F)
+          aws ce get-cost-and-usage --time-period Start="$START",End="$END" --granularity DAILY \
+            --metrics UnblendedCost --output json | tee bench/results/03-cost-explorer.json
+
+      - name: Destroy infrastructure
+        if: always()
+        working-directory: deploy
+        run: |
+          terraform destroy -auto-approve \
+            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
+            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
+            -var="image_tag=${{ github.sha }}"
+          date -u +%FT%TZ | tee ../bench/results/03-destroyed-at.txt
+
+      - name: Upload deployment evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: aws-deployment-evidence
+          path: bench/results/03-*

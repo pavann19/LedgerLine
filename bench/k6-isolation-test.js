@@ -30,7 +30,8 @@ export const options = {
   },
 };
 
-const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080';
+const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080/api/v1';
+const ACCESS_TOKEN = __ENV.ACCESS_TOKEN;
 const VARIANT = __ENV.VARIANT || 'VARIANT_1_PESSIMISTIC';
 
 // Real accounts, created and funded by bench/seed_accounts.py before this script runs
@@ -63,6 +64,7 @@ export default function () {
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
       'X-Isolation-Variant': VARIANT,
+      'Authorization': `Bearer ${ACCESS_TOKEN}`,
     },
   };
 
