@@ -4,6 +4,7 @@ WORKDIR /workspace
 
 COPY pom.xml mvnw mvnw.cmd ./
 COPY .mvn .mvn
+RUN chmod +x mvnw
 COPY ledger-service/pom.xml ledger-service/
 COPY projection-service/pom.xml projection-service/
 
