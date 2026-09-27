@@ -244,4 +244,18 @@ Prometheus metrics exposed at `http://localhost:8080/actuator/prometheus`:
 
 CI runs the Maven verification suite with JaCoCo reporting, builds both Docker images, emits SPDX SBOMs, and publishes HIGH/CRITICAL Trivy scan results without suppressing findings. The recorded local run in [`bench/results/02-local-verification.json`](bench/results/02-local-verification.json) has 19 passing ledger tests, 72.87% line coverage, and 178 SBOM packages per image. The committed Trivy reports currently contain one HIGH and three CRITICAL fixed-version findings per image; these are open findings, not a clean-scan claim.
 
+### Azure Evidence
+
+The Azure evidence run is documented in [`docs/experiments/03-cloud-load.md`](docs/experiments/03-cloud-load.md). Reviewable artifacts are committed as compact logs and summaries:
+
+- [`bench/results/03-azure-manual-evidence-summary.json`](bench/results/03-azure-manual-evidence-summary.json)
+- [`bench/results/03-azure-smoke.log`](bench/results/03-azure-smoke.log)
+- [`bench/results/03-azure-k6.log`](bench/results/03-azure-k6.log)
+- [`bench/results/03-azure-postgres-invariants.log`](bench/results/03-azure-postgres-invariants.log)
+- [`bench/results/03-azure-manual-cleanup-summary.json`](bench/results/03-azure-manual-cleanup-summary.json)
+
+The raw k6 JSON stream `bench/results/03-azure-k6.json` is intentionally ignored because it is large; keep it as a release artifact or compressed external artifact if exact event-level replay is needed.
+
+The current Azure evidence run passed smoke checks, completed the low-cost `correctness` k6 profile with 7,508/7,508 successful HTTP transfers, 0.00% failure rate, and p95 258.2ms on `Standard_D2ls_v6`, ran the PostgreSQL invariant query afterward, and confirmed resource-group cleanup. Azure budget creation is documented as manual because the CLI consumption-budget command rejected the resource-group filter syntax for this subscription/API path; the run still used a short-lived resource group and confirmed deletion.
+
 The one-shot AWS workflow is manual and budget-gated. It verifies an existing ACTUAL-cost budget alert, deploys using GitHub secrets, runs smoke and k6 checks, queries RDS invariants through SSM, captures available Cost Explorer data, and destroys the stack in an `always()` step. It has not been executed in this revision because doing so requires a pushed workflow plus configured repository secrets, while this work is local-only. See [`bench/results/03-aws-run-status.json`](bench/results/03-aws-run-status.json). Portfolio and resume wording is derived only from these result files: [`docs/portfolio-card.md`](docs/portfolio-card.md) and [`docs/resume-line.md`](docs/resume-line.md).

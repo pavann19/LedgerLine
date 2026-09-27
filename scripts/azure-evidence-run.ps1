@@ -1,7 +1,9 @@
 param(
     [string]$Location = "centralindia",
     [string]$VmSize = "Standard_D2ls_v6",
-    [decimal]$BudgetAmount = 25
+    [decimal]$BudgetAmount = 25,
+    [ValidateSet("correctness", "performance")]
+    [string]$K6Profile = "correctness"
 )
 
 $ErrorActionPreference = "Stop"
@@ -67,6 +69,7 @@ $summary = [ordered]@{
     budgetName = $budgetName
     budgetAmountUsd = $BudgetAmount
     vmSize = $VmSize
+    k6Profile = $K6Profile
 }
 
 function Save-Summary {
@@ -98,6 +101,32 @@ function Invoke-DockerLogged {
     if ($code -ne 0) { throw $FailureMessage }
 }
 
+function Wait-HttpHealth {
+    param(
+        [string]$Name,
+        [string]$Uri,
+        [string]$OutputName,
+        [int]$Attempts = 90,
+        [int]$DelaySeconds = 10
+    )
+    for ($i = 1; $i -le $Attempts; $i++) {
+        try {
+            $health = Invoke-WebRequest -UseBasicParsing -Uri $Uri -TimeoutSec 5
+            $content = if ($health.Content -is [byte[]]) {
+                [Text.Encoding]::UTF8.GetString($health.Content)
+            } else {
+                [string]$health.Content
+            }
+            if ($content -match '"status"\s*:\s*"UP"') {
+                $content | Set-Content -Encoding UTF8 (Join-Path $results $OutputName)
+                return
+            }
+        } catch {}
+        Start-Sleep -Seconds $DelaySeconds
+    }
+    throw "$Name did not become healthy at $Uri"
+}
+
 Save-Summary "creating-resource-group"
 
 try {
@@ -115,7 +144,18 @@ try {
             --resource-group-filter "/subscriptions/$subscriptionId/resourceGroups/$rg" `
             --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-budget.json")
     } catch {
-        $_.Exception.Message | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-budget-warning.txt")
+        @"
+Azure budget creation did not complete automatically.
+
+Reason:
+$($_.Exception.Message)
+
+Manual fallback:
+Create a Cost Management budget in the Azure portal scoped to resource group '$rg'
+with amount '$BudgetAmount' before running long-lived or repeated evidence tests.
+This script still creates all resources inside one short-lived resource group and
+deletes that group in finally, then polls 'az group exists' until it returns false.
+"@ | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-budget-manual.md")
     }
 
     Save-Summary "creating-acr"
@@ -166,10 +206,10 @@ runcmd:
   - systemctl enable --now docker
   - docker network create ledgerline || true
   - docker login $acrLoginServer -u $acrUser -p '$acrPass'
-  - docker run -d --name ledgerline-kafka --network ledgerline -p 9092:9092 -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e KAFKA_NUM_PARTITIONS=3 apache/kafka:3.8.0
+  - docker run -d --name ledgerline-kafka --restart unless-stopped --network ledgerline --network-alias kafka -p 9092:9092 --memory=900m --cpus=0.75 -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e KAFKA_NUM_PARTITIONS=3 apache/kafka:3.8.0
   - sleep 60
-  - docker run -d --name ledgerline-ledger-service --network ledgerline -p 8080:8080 -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 $acrLoginServer/ledger-service:$tag
-  - docker run -d --name ledgerline-projection-service --network ledgerline -p 8081:8081 -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
+  - docker run -d --name ledgerline-ledger-service --restart unless-stopped --network ledgerline -p 8080:8080 --memory=900m --cpus=0.80 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=12 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=4 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_PRODUCER_PROPERTIES_LINGER_MS=5 -e SPRING_KAFKA_PRODUCER_PROPERTIES_BATCH_SIZE=32768 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 -e LEDGER_OUTBOX_RELAY_BATCH_SIZE=100 $acrLoginServer/ledger-service:$tag
+  - docker run -d --name ledgerline-projection-service --restart unless-stopped --network ledgerline -p 8081:8081 --memory=700m --cpus=0.45 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=35 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=6 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_CONSUMER_PROPERTIES_MAX_POLL_RECORDS=100 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
 "@
     $cloudInitPath = Join-Path ([IO.Path]::GetTempPath()) "ledgerline-cloud-init-$stamp.yaml"
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
@@ -197,21 +237,13 @@ runcmd:
     $summary.publicIp = $ip
     Save-Summary "waiting-for-health"
 
-    $healthOk = $false
-    for ($i = 1; $i -le 60; $i++) {
-        try {
-            $health = Invoke-WebRequest -UseBasicParsing -Uri "http://${ip}:8080/actuator/health" -TimeoutSec 5
-            if ($health.Content -match "UP") {
-                $health.Content | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
-                $healthOk = $true
-                break
-            }
-        } catch {}
-        Start-Sleep -Seconds 10
-    }
-    if (-not $healthOk) {
+    try {
+        Wait-HttpHealth -Name "Ledger service" -Uri "http://${ip}:8080/actuator/health" -OutputName "03-azure-ledger-health.json"
+        Wait-HttpHealth -Name "Projection service" -Uri "http://${ip}:8081/actuator/health" -OutputName "03-azure-projection-health.json"
+        Get-Content (Join-Path $results "03-azure-ledger-health.json") -Raw | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
+    } catch {
         az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts "docker ps -a; docker logs --tail 200 ledgerline-ledger-service; docker logs --tail 100 ledgerline-kafka" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health-failure-logs.json")
-        throw "Ledger service did not become healthy"
+        throw
     }
 
     Save-Summary "running-smoke"
@@ -233,6 +265,7 @@ runcmd:
         -e ACCOUNT_A="$accountA" `
         -e ACCOUNT_B="$accountB" `
         -e CLOUD_URL="http://${ip}:8080/api/v1" `
+        -e K6_PROFILE="$K6Profile" `
         -v "${benchPath}:/bench" `
         grafana/k6 run /bench/k6-cloud-load.js --out json=/bench/results/03-azure-k6.json 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-k6.log")
     $summary.k6ExitCode = $LASTEXITCODE
@@ -240,7 +273,7 @@ runcmd:
     Save-Summary "querying-invariants"
 
     $sql = Get-Content (Join-Path $repo "bench/rds-invariants.sql") -Raw
-    $cmd = "cat > /tmp/invariants.sql <<'SQL'`n$sql`nSQL`nPGPASSWORD='$dbPassword' psql 'host=${pgHost} port=5432 dbname=ledgerline user=ledgeradmin sslmode=require' -f /tmp/invariants.sql"
+    $cmd = "cat > /tmp/invariants.sql <<'SQL'`n$sql`nSQL`nPGPASSWORD='$dbPassword' psql -v ON_ERROR_STOP=1 -P pager=off 'host=${pgHost} port=5432 dbname=ledgerline user=ledgeradmin sslmode=require' -f /tmp/invariants.sql 2>&1 | tee /tmp/invariants.out; test `${PIPESTATUS[0]} -eq 0"
     az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts $cmd --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-postgres-invariants.json")
     Assert-LastExitCode "PostgreSQL invariant query failed"
 
@@ -263,7 +296,24 @@ finally {
     try {
         az group delete --name $rg --yes --no-wait
         (Get-Date).ToUniversalTime().ToString("o") | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-delete-requested-at.txt")
-        Save-Summary "delete-requested"
+        Save-Summary "waiting-for-delete"
+        $deleted = $false
+        for ($i = 1; $i -le 90; $i++) {
+            $exists = (az group exists --name $rg -o tsv).Trim()
+            "$((Get-Date).ToUniversalTime().ToString("o")) exists=$exists" | Add-Content -Encoding UTF8 (Join-Path $results "03-azure-delete-poll.log")
+            if ($exists -eq "false") {
+                $deleted = $true
+                break
+            }
+            Start-Sleep -Seconds 20
+        }
+        $summary.cleanupConfirmedAbsent = $deleted
+        if ($deleted) {
+            Save-Summary "deleted"
+        } else {
+            Save-Summary "delete-pending"
+            throw "Resource group delete was requested but az group exists did not return false before timeout"
+        }
     } catch {
         $_.Exception.Message | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-delete-error.txt")
         Save-Summary "delete-failed"
