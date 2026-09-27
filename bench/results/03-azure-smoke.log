@@ -1,0 +1,21 @@
+=== 1. Checking Service Health ===
+{"status":"UP","components":{"db":{"status":"UP","details":{"database":"PostgreSQL","validationQuery":"isValid()"}},"diskSpace":{"status":"UP","details":{"total":31025332224,"free":27451203584,"threshold":10485760,"path":"/app/.","exists":true}},"ping":{"status":"UP"},"ssl":{"status":"UP","details":{"validChains":[],"invalidChains":[]}}}}
+Ledger Service is UP.
+=== 2. Creating Customer Accounts ===
+Created Account A: 089d5a95-a3db-4562-a0b6-194284c6a8e6
+Created Account B: f4d6d8d4-5df1-483e-b198-259930201f0a
+=== 3. Creating Overdraft Funding Account ===
+Created Funding Account (Overdraft allowed): b6452f0e-9356-4fae-9223-2a9fa1939fad
+=== 4. Funding Account A from Funding Account ===
+{"transactionId":"27ab19ae-2b63-483e-b67b-52b269c56aea","idempotencyKey":"fund-9315","status":"POSTED","createdAt":1790507485.340306018,"postings":[{"id":3,"accountId":"b6452f0e-9356-4fae-9223-2a9fa1939fad","amountMinor":-50000,"currency":"USD","createdAt":1790507485.340306000},{"id":4,"accountId":"089d5a95-a3db-4562-a0b6-194284c6a8e6","amountMinor":50000,"currency":"USD","createdAt":1790507485.340306000}],"idempotentReplay":false}Funded Account A with 50,000 minor units ($500.00).
+=== 5. Transferring from Account A to Account B ===
+Transfer response: {"transactionId":"c35ddc2a-3696-4fc6-aa00-1c959901ee3b","idempotencyKey":"tx-12661","status":"POSTED","createdAt":1790507485.484552789,"postings":[{"id":5,"accountId":"089d5a95-a3db-4562-a0b6-194284c6a8e6","amountMinor":-12500,"currency":"USD","createdAt":1790507485.484553000},{"id":6,"accountId":"f4d6d8d4-5df1-483e-b198-259930201f0a","amountMinor":12500,"currency":"USD","createdAt":1790507485.484553000}],"idempotentReplay":false}
+=== 6. Testing Idempotent Replay ===
+Replay response verified (same key + same payload).
+=== 7. Verifying Account Balances ===
+Account A balance: 37500 (Expected: 37500)
+Account B balance: 12500 (Expected: 12500)
+>>> Balance verification PASSED! <<<
+=== 8. Verifying Postings History ===
+{"items":[{"id":5,"accountId":"089d5a95-a3db-4562-a0b6-194284c6a8e6","amountMinor":-12500,"currency":"USD","createdAt":1790507485.484553000},{"id":4,"accountId":"089d5a95-a3db-4562-a0b6-194284c6a8e6","amountMinor":50000,"currency":"USD","createdAt":1790507485.340306000}],"nextCursor":null}
+=== All smoke tests passed successfully! ===

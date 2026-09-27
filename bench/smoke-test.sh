@@ -39,7 +39,7 @@ curl -sf -X POST "${API_URL}/transfers" -H "Authorization: Bearer ${ACCESS_TOKEN
   -H "Idempotency-Key: ${IDEMP_KEY_FUND}" \
   -d "{\"fromAccountId\":\"${ACC_FUNDING}\",\"toAccountId\":\"${ACC_A}\",\"amountMinor\":50000,\"currency\":\"USD\"}"
 
-echo "Funded Account A with 50,000 minor units ($500.00)."
+echo "Funded Account A with 50,000 minor units (\$500.00)."
 
 echo "=== 5. Transferring from Account A to Account B ==="
 IDEMP_KEY_TX="tx-${RANDOM}"
