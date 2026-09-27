@@ -1,27 +1,36 @@
 {
+  "source": "scripts/azure-evidence-run.ps1",
+  "gitCommit": "9da80b4",
+  "resourceGroup": "ledgerline-evidence-20260927183955",
+  "location": "centralindia",
+  "vmSize": "Standard_D2ls_v6",
+  "k6Profile": "correctness",
   "smoke": {
-    "ip": "104.211.99.213",
-    "accountA": "089d5a95-a3db-4562-a0b6-194284c6a8e6",
-    "accountB": "f4d6d8d4-5df1-483e-b198-259930201f0a",
-    "smoke": "passed"
+    "publicIp": "20.219.7.241",
+    "accountA": "8c8ba8ed-f318-43ec-9c64-80f044dc6711",
+    "accountB": "f05e10ef-75a1-4fa0-a84e-e3b169b2cfab",
+    "result": "passed"
   },
-  "k6ExitCode": 99,
-  "k6Highlights": [
-    "12947",
-    "115",
-    "0.88%  115 out of 13062",
-    "http_req_duration..............: avg=466.92ms   min=36.52ms   med=394.27ms   max=5.36s       p(90)=945.25ms   p(95)=1.24s"
-  ],
+  "k6": {
+    "exitCode": 0,
+    "httpRequests": 7508,
+    "successfulTransfers": 7508,
+    "httpFailureRate": "0.00%",
+    "p95LatencyMs": 258.2,
+    "p99LatencyMs": 341.58,
+    "throughputRps": 75.024155
+  },
   "invariants": {
     "exitCode": 0,
-    "postgres": "llpgeb7129f218.postgres.database.azure.com",
-    "onErrorStop": true
+    "evidence": "bench/results/03-azure-postgres-invariants.json"
   },
   "cleanup": {
-    "resourceGroup": "ledgerline-evidence-20260927162429",
-    "existsBeforeDeleteRequest": "true",
-    "deleteRequestedAtUtc": "2026-09-27T11:18:42.401913Z",
     "existsAfterDeleteCompleted": false,
-    "deleteConfirmedAtUtc": "2026-09-27T11:23:18.4526399Z"
+    "cleanupConfirmedAbsent": true,
+    "deleteConfirmedAtUtc": "2026-09-27T13:28:55.7429921Z"
+  },
+  "budget": {
+    "automaticBudgetCommand": "failed: Azure CLI consumption budget API rejected resource-group filter syntax",
+    "fallback": "manual Azure Cost Management budget setup documented by script; cost control enforced by short-lived resource group and confirmed deletion"
   }
 }

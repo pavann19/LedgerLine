@@ -1,6 +1,25 @@
 {
-  "k6ExitCode": 99,
-  "ip": "104.211.99.213",
-  "accountA": "089d5a95-a3db-4562-a0b6-194284c6a8e6",
-  "accountB": "f4d6d8d4-5df1-483e-b198-259930201f0a"
+  "source": "scripts/azure-evidence-run.ps1",
+  "gitCommit": "9da80b4",
+  "resourceGroup": "ledgerline-evidence-20260927183955",
+  "vmSize": "Standard_D2ls_v6",
+  "k6Profile": "correctness",
+  "k6ExitCode": 0,
+  "httpRequests": 7508,
+  "successfulTransfers": 7508,
+  "httpFailureRate": "0.00%",
+  "httpFailures": "0 out of 7508",
+  "avgLatencyMs": 135.96,
+  "medianLatencyMs": 124.25,
+  "p90LatencyMs": 224.3,
+  "p95LatencyMs": 258.2,
+  "p99LatencyMs": 341.58,
+  "maxLatencyMs": 609.68,
+  "throughputRps": 75.024155,
+  "thresholds": {
+    "p95": "p(95)<1500 passed",
+    "p99": "p(99)<3000 passed",
+    "httpFailureRate": "rate<0.01 passed"
+  },
+  "rawJson": "bench/results/03-azure-k6.json intentionally ignored"
 }

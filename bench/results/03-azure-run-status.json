@@ -1,0 +1,18 @@
+{
+  "status": "deleted",
+  "startedAtUtc": "2026-09-27T13:09:56.0107849Z",
+  "resourceGroup": "ledgerline-evidence-20260927183955",
+  "location": "centralindia",
+  "acr": "llebee30fef8",
+  "postgres": "llpgebee30fef8",
+  "vm": "ll-vm-ebee30fef8",
+  "gitCommit": "9da80b4",
+  "budgetName": "ledgerline-20260927183955",
+  "budgetAmountUsd": 25.0,
+  "vmSize": "Standard_D2ls_v6",
+  "k6Profile": "correctness",
+  "updatedAtUtc": "2026-09-27T13:28:55.7429921Z",
+  "publicIp": "20.219.7.241",
+  "k6ExitCode": 0,
+  "cleanupConfirmedAbsent": true
+}

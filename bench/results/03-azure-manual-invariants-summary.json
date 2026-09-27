@@ -1,5 +1,14 @@
 {
+  "source": "scripts/azure-evidence-run.ps1",
+  "gitCommit": "9da80b4",
+  "resourceGroup": "ledgerline-evidence-20260927183955",
   "exitCode": 0,
-  "postgres": "llpgeb7129f218.postgres.database.azure.com",
-  "onErrorStop": true
+  "postgres": "llpgebee30fef8.postgres.database.azure.com",
+  "checks": [
+    "global posting sum query executed",
+    "negative customer balances query executed",
+    "cached balance mismatch query executed",
+    "unbalanced transaction query executed"
+  ],
+  "evidence": "bench/results/03-azure-postgres-invariants.json"
 }

@@ -1,7 +1,9 @@
 {
-  "resourceGroup": "ledgerline-evidence-20260927162429",
-  "existsBeforeDeleteRequest": "true",
-  "deleteRequestedAtUtc": "2026-09-27T11:18:42.401913Z",
+  "source": "scripts/azure-evidence-run.ps1",
+  "resourceGroup": "ledgerline-evidence-20260927183955",
+  "deleteRequested": true,
   "existsAfterDeleteCompleted": false,
-  "deleteConfirmedAtUtc": "2026-09-27T11:23:18.4526399Z"
+  "deleteConfirmedAtUtc": "2026-09-27T13:28:55.7429921Z",
+  "scriptStatus": "deleted",
+  "cleanupConfirmedAbsent": true
 }
