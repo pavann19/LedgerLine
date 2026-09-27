@@ -13,3 +13,4 @@ target/
 *.tfstate.backup
 .terraform/
 ledger-service/.jqwik-database
+bench/results/03-azure-k6.json

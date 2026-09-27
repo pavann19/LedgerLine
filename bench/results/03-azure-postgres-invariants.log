@@ -1,0 +1,25 @@
+Pager usage is off.
+global posting sum must be zero
+ global_posting_sum 
+--------------------
+                  0
+(1 row)
+
+customer balances must be non-negative
+ negative_customer_balances 
+----------------------------
+                          0
+(1 row)
+
+cached balances must equal posting sums
+ cached_balance_mismatches 
+---------------------------
+                         0
+(1 row)
+
+every transaction must be zero sum
+ unbalanced_transactions 
+-------------------------
+                       0
+(1 row)
+

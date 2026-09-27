@@ -1,0 +1,27 @@
+{
+  "smoke": {
+    "ip": "104.211.99.213",
+    "accountA": "089d5a95-a3db-4562-a0b6-194284c6a8e6",
+    "accountB": "f4d6d8d4-5df1-483e-b198-259930201f0a",
+    "smoke": "passed"
+  },
+  "k6ExitCode": 99,
+  "k6Highlights": [
+    "12947",
+    "115",
+    "0.88%  115 out of 13062",
+    "http_req_duration..............: avg=466.92ms   min=36.52ms   med=394.27ms   max=5.36s       p(90)=945.25ms   p(95)=1.24s"
+  ],
+  "invariants": {
+    "exitCode": 0,
+    "postgres": "llpgeb7129f218.postgres.database.azure.com",
+    "onErrorStop": true
+  },
+  "cleanup": {
+    "resourceGroup": "ledgerline-evidence-20260927162429",
+    "existsBeforeDeleteRequest": "true",
+    "deleteRequestedAtUtc": "2026-09-27T11:18:42.401913Z",
+    "existsAfterDeleteCompleted": false,
+    "deleteConfirmedAtUtc": "2026-09-27T11:23:18.4526399Z"
+  }
+}

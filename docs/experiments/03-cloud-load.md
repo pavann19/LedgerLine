@@ -1,50 +1,48 @@
 # Experiment 03: Minimal Cloud Deployment, Load Test, and Cost Teardown
 
-## Status: NOT YET EXECUTED
+## Status: AZURE EVIDENCE RUN COMPLETED
 
-This document previously contained a load-test JSON block, post-deploy SQL verification output, and a "Measured Monthly Cost" table presented as real results. None of them were produced by an actual `terraform apply` + running deployment — there is no committed deploy workflow run, no raw k6 output file, and no teardown record anywhere in this repo to back those numbers. They have been removed rather than corrected, because there is nothing in this environment (no AWS credentials, no permission to provision billed cloud infrastructure) to re-measure them from.
+On 2026-09-27, LedgerLine was deployed to a short-lived Azure environment and validated against a public endpoint. The run used Azure Container Registry for the application images, Azure Database for PostgreSQL Flexible Server for persistence, and a single Ubuntu VM running Docker containers for Kafka, `ledger-service`, and `projection-service`.
 
-The architecture below is the deployment **as designed** in `deploy/main.tf` — described as intent, not as something that has run.
+The resource group was deleted after the run. The final cleanup check returned `false` for `az group exists --name ledgerline-evidence-20260927162429`, so the evidence environment is no longer present.
+
+## Azure topology used for the evidence run
 
 ```
- Internet Clients (k6 Load Generator)
+ Internet Clients (smoke test + k6)
                  │
                  ▼
-      [AWS VPC (10.0.0.0/16)]
+      [Azure VM: Standard_D2ls_v6]
                  │
   ┌──────────────┴──────────────┐
-  │  Public Subnet (10.0.1.0/24) │
-  │                             │
-  │   [t4g.small Host]          │
-  │   ├── Docker Compose        │
-  │   ├── ledger-service:8080   │
-  │   ├── projection-svc:8081   │
-  │   ├── Apache Kafka (KRaft)  │
-  │   └── Prometheus:9090       │
+  │ Docker network: ledgerline   │
+  │                              │
+  │  ledger-service:8080         │
+  │  projection-service:8081     │
+  │  Apache Kafka 3.8.0 (KRaft)  │
   └──────────────┬──────────────┘
-                 │ (Internal Port 5432)
-  ┌──────────────┴──────────────┐
-  │  Private DB Subnet Group    │
-  │                             │
-  │   [AWS RDS PostgreSQL 16]   │
-  │   db.t4g.micro (ARM Graviton2)│
-  │   20 GB gp3 Storage         │
-  └─────────────────────────────┘
+                 │ TLS / public PostgreSQL endpoint
+                 ▼
+  [Azure Database for PostgreSQL Flexible Server 16]
 ```
 
-Note: `t4g.*`/`db.t4g.*` instance families run on **Graviton2**, not Graviton3 (Graviton3 is used by the `c7g`/`m7g`/`r7g` families and newer). An earlier version of this document mislabeled the app host as Graviton3; corrected here.
+Images were built locally and pushed to ACR because this subscription rejected ACR Tasks for the run. Central India accepted PostgreSQL creation but rejected `Standard_B2s`, so the final evidence run used `Standard_D2ls_v6`.
 
-The deployment path is now implemented but remains unexecuted. The manual workflow refuses to apply infrastructure unless it can verify an existing ACTUAL-cost AWS Budget notification, builds and pushes both images, supplies the JWT secret, runs smoke and k6 checks, queries RDS through SSM, records available Cost Explorer data, and destroys the stack in an `always()` step. Current status and missing claims are recorded in [`bench/results/03-aws-run-status.json`](../../bench/results/03-aws-run-status.json).
+## Evidence summary
 
-## To produce real evidence for this section
+| Check | Result | Evidence |
+| --- | --- | --- |
+| Public service health | `UP`, database health `UP` | [`03-azure-health.json`](../../bench/results/03-azure-health.json) |
+| Smoke test | Passed account creation, funding, transfer, idempotent replay, balance check, postings history | [`03-azure-smoke.log`](../../bench/results/03-azure-smoke.log) |
+| k6 load test | Completed 13,062 iterations with 12,947 successful transfers and 115 rejected transfers | [`03-azure-k6.log`](../../bench/results/03-azure-k6.log) |
+| k6 thresholds | Failed latency thresholds: p95 was 1.24s against a 150ms threshold; HTTP failure rate was 0.88%, below the 1% threshold | [`03-azure-manual-k6-summary.json`](../../bench/results/03-azure-manual-k6-summary.json) |
+| Ledger invariants after load | Passed: global posting sum 0, no negative customer balances, no cached-balance mismatches, no unbalanced transactions | [`03-azure-postgres-invariants.log`](../../bench/results/03-azure-postgres-invariants.log) |
+| Cleanup | Delete requested, later confirmed absent with `az group exists == false` | [`03-azure-manual-cleanup-summary.json`](../../bench/results/03-azure-manual-cleanup-summary.json) |
 
-1. Configure the required GitHub secrets and create the named AWS Budget alert.
-2. Explicitly authorize pushing this revision, then manually dispatch `.github/workflows/deploy.yml`.
-3. Run `bench/smoke-test.sh` against the public URL from the Terraform output; commit its output/log.
-4. Run `bench/k6-cloud-load.js` against the public URL; commit the raw JSON output (`--out json=...`) under `bench/results/`.
-5. Run the four invariant SQL queries (conservation of money, no negative balances, postings-sum-equals-balance, zero-sum-per-transaction) directly against the RDS instance; commit the query output alongside the k6 JSON.
-6. Record the actual AWS costs incurred (from the Cost Explorer / billing console for the exact window the environment existed), not list-price arithmetic.
-7. Run `terraform destroy -auto-approve` and note the destroy timestamp here.
-8. Only then, rewrite this document with real numbers, each one linking to the committed file it came from.
+The raw k6 JSON stream was generated locally as `bench/results/03-azure-k6.json`, but it is intentionally ignored because it is about 50 MB. The committed k6 log and summary capture the reviewable totals and threshold result.
 
-Until that happens, this experiment is documented as **not run**, and the README's cloud/cost section should not claim otherwise.
+## Honest interpretation
+
+This run is strong evidence that the ledger can be deployed on Azure, process real HTTP traffic, persist to managed PostgreSQL, and preserve double-entry accounting invariants after load.
+
+It is not evidence of production-ready latency. The low-cost single-VM topology kept correctness intact, but p95 latency exceeded the aggressive threshold. The next performance step is to separate Kafka/app compute, add service readiness/restart policies, tune connection pools, and rerun the same evidence workflow with a target p95 suitable for the chosen VM class.

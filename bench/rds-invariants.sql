@@ -4,7 +4,7 @@ SELECT COALESCE(SUM(amount_minor), 0) AS global_posting_sum FROM postings;
 \echo 'customer balances must be non-negative'
 SELECT COUNT(*) AS negative_customer_balances
 FROM account_balances b JOIN accounts a ON a.id = b.account_id
-WHERE a.account_type = 'CUSTOMER' AND b.balance_minor < 0;
+WHERE b.account_type = 'CUSTOMER' AND b.balance_minor < 0;
 \echo 'cached balances must equal posting sums'
 SELECT COUNT(*) AS cached_balance_mismatches
 FROM account_balances b
