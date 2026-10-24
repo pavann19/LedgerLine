@@ -74,7 +74,7 @@ $summary = [ordered]@{
     vm = $vm
     gitCommit = $tag
     budgetName = $budgetName
-    budgetAmountUsd = $BudgetAmount
+    budgetAmountBillingCurrency = $BudgetAmount
     vmSize = $VmSize
     k6Profile = $K6Profile
 }
@@ -142,17 +142,16 @@ try {
 
     try {
         $subscriptionId = (az account show --query id -o tsv).Trim()
-        az consumption budget create `
-            --budget-name $budgetName `
-            --category cost `
-            --amount $BudgetAmount `
-            --time-grain monthly `
-            --start-date $monthStart.ToString("yyyy-MM-dd") `
-            --end-date $budgetEnd.ToString("yyyy-MM-dd") `
-            --resource-group-filter "/subscriptions/$subscriptionId/resourceGroups/$rg" `
-            --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-budget.json")
+        $budgetRequest = @{ properties=@{ category='Cost'; amount=$BudgetAmount; timeGrain='Monthly';
+            timePeriod=@{startDate=$monthStart.ToString('yyyy-MM-ddT00:00:00Z');endDate=$budgetEnd.ToString('yyyy-MM-ddT00:00:00Z')} } }
+        $budgetFile = Join-Path $results 'budget-request.json'
+        [IO.File]::WriteAllText($budgetFile, ($budgetRequest | ConvertTo-Json -Depth 6), [Text.UTF8Encoding]::new($false))
+        $budgetUrl = "https://management.azure.com/subscriptions/$subscriptionId/resourceGroups/$rg/providers/Microsoft.Consumption/budgets/${budgetName}?api-version=2024-08-01"
+        az rest --method put --url $budgetUrl --body "@$budgetFile" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-budget.json")
         Assert-LastExitCode "Azure budget creation failed; no hard spending cap is provided"
+        $summary.budgetCreated = $true
     } catch {
+        $summary.budgetCreated = $false
         @"
 Azure budget creation did not complete automatically.
 
@@ -245,7 +244,7 @@ runcmd:
     $nsgName = ($nsgId -split '/')[-1]
     az network nsg rule create --resource-group $rg --nsg-name $nsgName --name ReviewerSSH --priority 1000 --source-address-prefixes "$reviewerIp/32" --destination-port-ranges 22 --access Allow --protocol Tcp --output none
     Assert-LastExitCode "Restricted SSH rule failed"
-    az postgres flexible-server firewall-rule create --resource-group $rg --name $pg --rule-name DemoVmOnly --start-ip-address $ip --end-ip-address $ip --output none
+    az postgres flexible-server firewall-rule create --resource-group $rg --server-name $pg --name DemoVmOnly --start-ip-address $ip --end-ip-address $ip --output none
     Assert-LastExitCode "VM PostgreSQL firewall rule failed"
     $sshArgs = @('-N', '-o', 'ExitOnForwardFailure=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ServerAliveInterval=15', '-L', '127.0.0.1:8080:127.0.0.1:8080', '-L', '127.0.0.1:8081:127.0.0.1:8081', "azureuser@$ip")
     $sshTunnel = Start-Process ssh.exe -ArgumentList $sshArgs -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $results 'ssh-tunnel.log')
