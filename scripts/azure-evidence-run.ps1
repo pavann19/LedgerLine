@@ -342,9 +342,10 @@ DO $$ BEGIN
 END $$;
 SELECT 'CLOUD_SQL_ASSERTIONS_PASSED' AS verification;
 '@
-    # Keep the same bounded post-load catch-up window as local verification.
+    # Allow a settling period before the global SQL check. Remote invocation adds
+    # latency; this is not a measurement of the local 60-second catch-up bound.
     Start-Sleep -Seconds 60
-    $cmd = "cat > /tmp/invariants.sql <<'SQL'`n$sql`nSQL`nPGPASSWORD='$dbPassword' psql -v ON_ERROR_STOP=1 -P pager=off 'host=${pgHost} port=5432 dbname=ledgerline user=ledgeradmin sslmode=require' -f /tmp/invariants.sql 2>&1 | tee /tmp/invariants.out; test `${PIPESTATUS[0]} -eq 0"
+    $cmd = "cat > /tmp/invariants.sql <<'SQL'`n$sql`nSQL`nPGPASSWORD='$dbPassword' psql -v ON_ERROR_STOP=1 -P pager=off 'host=${pgHost} port=5432 dbname=ledgerline user=ledgeradmin sslmode=require' -f /tmp/invariants.sql > /tmp/invariants.out 2>&1; result=`$?; cat /tmp/invariants.out; exit `$result"
     az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts $cmd --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-postgres-invariants.json")
     Assert-LastExitCode "PostgreSQL invariant query failed"
     $remoteResult = Get-Content (Join-Path $results "03-azure-postgres-invariants.json") -Raw | ConvertFrom-Json
