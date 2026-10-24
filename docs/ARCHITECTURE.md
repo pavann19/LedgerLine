@@ -2,6 +2,20 @@
 
 Two Spring Boot services use JDBC and PostgreSQL. The ledger service is the synchronous balance authority; the projection service consumes Kafka into eventual statements and daily summaries. There is no ORM, cache, payment gateway, FX provider, or distributed transaction.
 
+```mermaid
+flowchart LR
+    Client[Authenticated client] -->|Transfer + idempotency key| Ledger[Ledger service]
+    Ledger -->|One atomic transaction| DB[(PostgreSQL: balances, postings, outbox)]
+    DB -->|Unpublished outbox rows| Relay[Outbox relay]
+    Relay -->|At-least-once publication| Kafka[Kafka]
+    Kafka --> Consumer[Projection consumer]
+    Consumer -->|Deduplication + projection transaction| Views[(Statements and UTC summaries)]
+    Client -->|Read eventual views| API[Projection API]
+    API --> Views
+```
+
+Only the ledger database decides available funds. A successful transfer can precede its visible statement; replaying the same idempotency key and body returns the original transaction.
+
 ## Mutation traces
 
 Account creation: JWT/role filter -> DTO validation -> non-customer provisioning restriction -> transactional service proxy -> account + zero balance + audit -> commit -> response.
