@@ -43,14 +43,23 @@ public class AccountService {
 
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request) {
-        return createAccount(request, "SYSTEM");
+        return createAccount(request, "SYSTEM", true);
     }
 
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request, String principalId) {
+        return createAccount(request, principalId, false);
+    }
+
+    @Transactional
+    public AccountResponse createAccount(CreateAccountRequest request, String principalId, boolean operator) {
+        if (!operator && request.type() != com.ledgerline.ledger.domain.AccountType.CUSTOMER) {
+            throw new AccessDeniedException("Only operators may create non-customer accounts");
+        }
+        java.util.Currency.getInstance(request.currency().trim().toUpperCase(java.util.Locale.ROOT));
         UUID accountId = UUID.randomUUID();
         Instant now = Instant.now();
-        String currency = request.currency().trim().toUpperCase();
+        String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
 
         Account account = new Account(
             accountId,

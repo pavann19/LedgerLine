@@ -26,6 +26,84 @@ class ProjectionDeduplicationTest extends BaseProjectionIntegrationTest {
     @Autowired
     private ProcessedEventsRepository processedEventsRepository;
 
+    @Autowired
+    private org.springframework.jdbc.core.simple.JdbcClient jdbc;
+
+    @Test
+    void incrementalProjectionMatchesFullHistoryOracleAcrossDaysAndEqualTimestamps() {
+        UUID account = UUID.randomUUID(), other = UUID.randomUUID();
+        Instant base = Instant.parse("2026-10-20T23:59:59Z");
+        int[] arrivalOrder = {4, 0, 3, 1, 2, 2, -1};
+        for (int position : arrivalOrder) {
+            Instant timestamp = base.plusSeconds(position);
+            assertTrue(projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(),
+                other, account, 10, "USD", timestamp)));
+            assertEquals(0L, jdbc.sql("""
+                SELECT count(*) FROM (
+                    SELECT running_balance_minor, sum(amount_minor) OVER (ORDER BY created_at,id) expected
+                    FROM statement_view WHERE account_id = ?
+                ) checked WHERE running_balance_minor <> expected
+                """).param(account).query(Long.class).single());
+            assertEquals(0L, jdbc.sql("""
+                WITH expected AS (
+                    SELECT (created_at AT TIME ZONE 'UTC')::date AS summary_date,
+                        (array_agg(running_balance_minor - amount_minor ORDER BY created_at,id))[1] opening,
+                        (array_agg(running_balance_minor ORDER BY created_at DESC,id DESC))[1] closing,
+                        sum(amount_minor) FILTER (WHERE amount_minor > 0) inflow, count(*) count
+                    FROM statement_view WHERE account_id = ? GROUP BY 1
+                ) SELECT count(*) FROM expected e JOIN daily_account_summary d ON d.summary_date=e.summary_date
+                WHERE d.account_id=? AND (d.opening_balance_minor<>e.opening OR d.closing_balance_minor<>e.closing
+                    OR d.total_inflow_minor<>e.inflow OR d.posting_count<>e.count)
+                """).params(account, account).query(Long.class).single());
+        }
+    }
+
+    @Test
+    void inOrderEventDoesNotRewriteEarlierHistoryAndReplayChangesNothing() {
+        UUID account = UUID.randomUUID(), other = UUID.randomUUID();
+        Instant base = Instant.parse("2026-10-20T10:00:00Z");
+        var first = new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(), other, account, 100, "USD", base);
+        assertTrue(projectionService.projectTransfer(first));
+        String rowVersion = jdbc.sql("SELECT xmin::text FROM statement_view WHERE account_id=?")
+            .param(account).query(String.class).single();
+        for (int i = 1; i <= 100; i++) {
+            assertTrue(projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(),
+                account, other, 1, "USD", base.plusSeconds(i))));
+        }
+        assertEquals(rowVersion, jdbc.sql("SELECT xmin::text FROM statement_view WHERE account_id=? AND transaction_id=?")
+            .params(account, first.transactionId()).query(String.class).single(), "In-order events must not rewrite old history");
+        assertFalse(projectionService.projectTransfer(first));
+        assertEquals(101, projectionService.getDailySummary(account, LocalDate.parse("2026-10-20")).orElseThrow().postingCount());
+        assertEquals(0, projectionService.getStatement(account, 1, 0).getFirst().runningBalanceMinor());
+    }
+
+    @Test
+    void usesPersistedMicrosecondTimestampForUtcDailySummary() {
+        UUID from = UUID.randomUUID(), to = UUID.randomUUID();
+        assertTrue(projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(),
+            from, to, 1, "USD", Instant.parse("2026-10-20T23:59:59.999999900Z"))));
+        LocalDate storedDay = jdbc.sql("SELECT (created_at AT TIME ZONE 'UTC')::date FROM statement_view WHERE account_id=?")
+            .param(to).query(java.sql.Date.class).single().toLocalDate();
+        assertEquals(1, projectionService.getDailySummary(to, storedDay).orElseThrow().closingBalanceMinor());
+        assertEquals(-1, projectionService.getDailySummary(from, storedDay).orElseThrow().closingBalanceMinor());
+    }
+
+    @Test
+    void overflowRollsBackBothAccountsAndProcessedEventMarker() {
+        UUID source = UUID.randomUUID(), destination = UUID.randomUUID();
+        Instant time = Instant.parse("2026-10-20T10:00:00Z");
+        assertTrue(projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(),
+            UUID.randomUUID(), destination, Long.MAX_VALUE, "USD", time)));
+        var overflow = new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(), source, destination,
+            1, "USD", time.plusSeconds(1));
+        assertThrows(ArithmeticException.class, () -> projectionService.projectTransfer(overflow));
+        assertFalse(processedEventsRepository.isProcessed(overflow.eventId()));
+        assertTrue(projectionService.getStatement(source, 10, 0).isEmpty());
+        assertTrue(projectionService.getDailySummary(source, LocalDate.parse("2026-10-20")).isEmpty());
+        assertEquals(1, projectionService.getStatement(destination, 10, 0).size());
+        assertEquals(Long.MAX_VALUE, projectionService.getStatement(destination, 1, 0).getFirst().runningBalanceMinor());
+    }
+
     @Test
     @DisplayName("Deduplication & Redelivery: Re-processing identical event ID does not double-apply projection")
     void shouldDeduplicateIdenticalEventsUnderMessageRedelivery() {
@@ -74,5 +152,44 @@ class ProjectionDeduplicationTest extends BaseProjectionIntegrationTest {
         assertTrue(fromSummary.isPresent());
         assertEquals(1, fromSummary.get().postingCount(), "Posting count must be 1, not incremented twice");
         assertEquals(5000L, fromSummary.get().totalOutflowMinor());
+    }
+
+    @Test
+    @DisplayName("Funding immediately followed by customer debit remains ordered when Kafka delivers the debit first")
+    void shouldRebuildStatementInEventTimeOrderWhenDebitArrivesBeforeFunding() {
+        UUID checking = UUID.randomUUID();
+        UUID funding = UUID.randomUUID();
+        UUID savings = UUID.randomUUID();
+        Instant fundingTime = Instant.parse("2026-10-01T10:00:00Z");
+        Instant debitTime = fundingTime.plusMillis(1);
+
+        TransferEventPayload fundingEvent = new TransferEventPayload(
+            UUID.randomUUID(), UUID.randomUUID(), funding, checking, 100_000L, "USD", fundingTime
+        );
+        TransferEventPayload debitEvent = new TransferEventPayload(
+            UUID.randomUUID(), UUID.randomUUID(), checking, savings, 12_500L, "USD", debitTime
+        );
+
+        // Reproduce the real cross-partition race: the later debit is consumed first.
+        assertTrue(projectionService.projectTransfer(debitEvent));
+        assertTrue(projectionService.projectTransfer(fundingEvent));
+
+        List<StatementViewEntry> statement = projectionService.getStatement(checking, 10, 0);
+        assertEquals(2, statement.size());
+        assertEquals(debitEvent.transactionId(), statement.get(0).transactionId());
+        assertEquals(-12_500L, statement.get(0).amountMinor());
+        assertEquals(87_500L, statement.get(0).runningBalanceMinor());
+        assertEquals(fundingEvent.transactionId(), statement.get(1).transactionId());
+        assertEquals(100_000L, statement.get(1).amountMinor());
+        assertEquals(100_000L, statement.get(1).runningBalanceMinor());
+
+        DailyAccountSummary summary = projectionService
+            .getDailySummary(checking, fundingTime.atZone(ZoneOffset.UTC).toLocalDate())
+            .orElseThrow();
+        assertEquals(0L, summary.openingBalanceMinor());
+        assertEquals(87_500L, summary.closingBalanceMinor());
+        assertEquals(100_000L, summary.totalInflowMinor());
+        assertEquals(12_500L, summary.totalOutflowMinor());
+        assertEquals(2, summary.postingCount());
     }
 }

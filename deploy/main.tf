@@ -20,9 +20,14 @@ variable "aws_region" {
   default = "us-east-1"
 }
 
+variable "reviewer_cidr" {
+  type        = string
+  description = "Single trusted reviewer CIDR permitted to reach the temporary HTTP demo; use an SSH/SSM tunnel for bearer tokens"
+}
+
 variable "environment" {
   type    = string
-  default = "production"
+  default = "evidence"
 }
 
 variable "db_password" {
@@ -105,7 +110,7 @@ resource "aws_security_group" "app_sg" {
     from_port   = 8080
     to_port     = 8080
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.reviewer_cidr]
   }
 
   ingress {
@@ -113,7 +118,7 @@ resource "aws_security_group" "app_sg" {
     from_port   = 8081
     to_port     = 8081
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.reviewer_cidr]
   }
 
   ingress {
@@ -121,7 +126,7 @@ resource "aws_security_group" "app_sg" {
     from_port   = 9090
     to_port     = 9090
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.reviewer_cidr]
   }
 
   egress {

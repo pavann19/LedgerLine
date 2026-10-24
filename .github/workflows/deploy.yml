@@ -3,31 +3,38 @@ name: Deploy to Cloud
 on:
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     name: Build & Deploy
     runs-on: ubuntu-latest
+    env:
+      TF_VAR_reviewer_cidr: ${{ secrets.REVIEWER_CIDR }}
+      TF_VAR_db_password: ${{ secrets.RDS_DB_PASSWORD }}
+      TF_VAR_jwt_secret: ${{ secrets.JWT_SECRET }}
     steps:
       - name: Checkout Code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Set up QEMU (cross-build for arm64 — the app host is Graviton2/t4g)
-        uses: docker/setup-qemu-action@v3
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
         with:
           platforms: arm64
 
       - name: Configure AWS Credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: us-east-1
 
       - name: Set up Terraform
-        uses: hashicorp/setup-terraform@v3
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
         with:
           terraform_version: 1.8.0
 
@@ -56,8 +63,6 @@ jobs:
         working-directory: deploy
         run: |
           terraform apply -auto-approve \
-            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
-            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -target=aws_ecr_repository.ledger_service \
             -target=aws_ecr_repository.projection_service
 
@@ -69,10 +74,10 @@ jobs:
           echo "projection_repo_url=$(terraform output -raw ecr_projection_service_repo_url)" >> "$GITHUB_OUTPUT"
 
       - name: Log in to ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@03f1aad4c6c7ffd436567f42f9384779290529bd # v2
 
       - name: Build & Push ledger-service image (linux/arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: deploy/Dockerfile.ledger
@@ -83,7 +88,7 @@ jobs:
             ${{ steps.ecr_repos.outputs.ledger_repo_url }}:latest
 
       - name: Build & Push projection-service image (linux/arm64)
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6
         with:
           context: .
           file: deploy/Dockerfile.projection
@@ -99,8 +104,6 @@ jobs:
         working-directory: deploy
         run: |
           terraform apply -auto-approve \
-            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
-            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -var="image_tag=${{ github.sha }}"
 
       - name: Terraform Outputs
@@ -126,7 +129,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Set up k6
-        uses: grafana/setup-k6-action@v1
+        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1 # v1
 
       - name: Run cloud load test
         env:
@@ -163,14 +166,12 @@ jobs:
         working-directory: deploy
         run: |
           terraform destroy -auto-approve \
-            -var="db_password=${{ secrets.RDS_DB_PASSWORD }}" \
-            -var="jwt_secret=${{ secrets.JWT_SECRET }}" \
             -var="image_tag=${{ github.sha }}"
           date -u +%FT%TZ | tee ../bench/results/03-destroyed-at.txt
 
       - name: Upload deployment evidence
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: aws-deployment-evidence
           path: bench/results/03-*

@@ -1,261 +1,49 @@
-# Ledgerline
+# LedgerLine
 
-> **A mission-critical financial ledger service that moves money between accounts using double-entry bookkeeping, guaranteeing no lost, duplicated, or unbalanced postings under concurrent requests, crashes, network partitions, and message redelivery.**
+LedgerLine is a Java 21 / Spring Boot 3.5 financial-backend demonstration. It records same-currency account transfers as signed integer minor-unit postings in PostgreSQL, then publishes a transactional outbox to Kafka for asynchronous statements and daily summaries.
 
-[![CI](https://github.com/ledgerline/ledgerline/actions/workflows/ci.yml/badge.svg)](.github/workflows/ci.yml)
-[![Java 21](https://img.shields.io/badge/Java-21-orange.svg)](https://openjdk.org/projects/jdk/21/)
-[![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.5.16-brightgreen.svg)](https://spring.io/projects/spring-boot)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue.svg)](https://www.postgresql.org/)
-[![Kafka](https://img.shields.io/badge/Kafka-KRaft-black.svg)](https://kafka.apache.org/)
+It is a portfolio implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
 
----
+## Financial model
 
-## 1. Problem Statement
-Financial software systems cannot tolerate lost money, phantom balances, duplicate executions, or unbalanced ledger entries. Common failure modes in production ledger implementations include:
-- **Floating-point inaccuracies** from IEEE 754 representations.
-- **Lost updates** caused by uncoordinated read-modify-write patterns under high concurrency.
-- **Deadlocks** when competing transactions lock shared accounts in arbitrary order.
-- **Dual-write hazards** when updating databases and publishing message queues without an outbox.
-- **Duplicate credits/debits** resulting from network timeouts and client retries.
+Accounts start at zero. Customers may create `CUSTOMER` accounts and debit only accounts they own. Operators may create `OVERDRAFT` and `INTERNAL` accounts and access all accounts. Only `OVERDRAFT` permits a negative balance; demo funding is a balanced transfer from an operator-created overdraft account. There is no deposit, withdrawal, closure, refund, FX, or reversal endpoint.
 
-**Ledgerline** solves these fundamental challenges through strict mathematical double-entry invariants, deterministic lock hierarchies, cryptographic request hashing for idempotency, transactional outbox relays, and idempotent event projection.
+Amounts are positive signed 64-bit integer minor units. No floating-point money, automatic decimal conversion, rounding, or FX is performed. Both accounts must have the same currency. Fractional JSON amounts and arithmetic overflow are rejected.
 
----
+One PostgreSQL transaction writes the transaction header, debit and credit postings, balances, outbox event, and audit record. The default strategy locks the two balance rows in deterministic UUID order under READ COMMITTED. Optimistic and SERIALIZABLE alternatives are experimental comparisons with bounded retries. The deliberately unsafe variant 0 is blocked through the public API and as the default; internal experiments retain it as a negative control.
 
-## 2. System Architecture
+Transfers require `Idempotency-Key` (1â€“128 non-control characters). Keys are scoped to the authenticated subject and bound to a SHA-256 hash of the normalized request. A committed duplicate returns its existing transaction; a conflicting body returns 422. Retry an ambiguous timeout using the **same key and body**. Keys are retained without TTL. Account creation has no idempotency contract.
 
-```mermaid
-flowchart TD
-    subgraph Clients["Client Layer"]
-        C1["HTTP Client / k6"]
-    end
+## Run locally
 
-    subgraph LedgerWrite["ledger-service (Write Core)"]
-        API["/api/v1 OAuth2 Resource Server<br/>CUSTOMER / OPERATOR"]
-        Strategy["TransferExecutionStrategy<br/>(Pessimistic / Optimistic / Serializable)"]
-        DBTx["Atomic Single DB Transaction"]
-        Relay["Outbox Relay Poller<br/>(SELECT ... FOR UPDATE SKIP LOCKED)"]
-    end
+Prerequisites: Docker Desktop with its Linux engine available. The demonstration uses PostgreSQL 16 and Kafka. Published Compose ports bind to localhost.
 
-    subgraph Postgres["PostgreSQL 16 Engine"]
-        T_Acc["accounts"]
-        T_Tx["transactions<br/>UNIQUE(principal_id, idempotency_key)"]
-        T_Post["postings<br/>Deferred Constraint Trigger<br/>SUM(amount_minor) = 0"]
-        T_Bal["account_balances<br/>CHECK(balance_minor >= 0)"]
-        T_Outbox["outbox<br/>JSONB Events"]
-        T_Audit["audit_log<br/>Append-Only"]
-    end
-
-    subgraph EventStream["Apache Kafka (KRaft)"]
-        Topic["Topic: ledger.transfers.v1<br/>acks=all, idempotent producer"]
-    end
-
-    subgraph ProjectionRead["projection-service (Read Model)"]
-        Consumer["Kafka Consumer<br/>Manual Immediate Ack"]
-        Dedup["processed_events<br/>Deduplication Table"]
-        Statement["statement_view<br/>Running Balance History"]
-        Summary["daily_account_summary<br/>Inflows, Outflows & Balances"]
-    end
-
-    C1 -->|"Bearer JWT + POST /api/v1/transfers<br/>(Idempotency-Key)"| API
-    API --> Strategy
-    Strategy --> DBTx
-    DBTx --> T_Tx
-    DBTx --> T_Post
-    DBTx --> T_Bal
-    DBTx --> T_Outbox
-    DBTx --> T_Audit
-    Relay -->|"SKIP LOCKED"| T_Outbox
-    Relay -->|"Publish (acks=all)"| Topic
-    Topic -->|"Consume"| Consumer
-    Consumer --> Dedup
-    Dedup -->|"Novel Event"| Statement
-    Dedup -->|"Novel Event"| Summary
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/local-demo.ps1
 ```
 
----
+The script generates a random signing secret and short-lived local tokens, creates accounts, performs funding and customer transfers, checks replay and projection results, and writes a git-ignored summary containing tokens. Cold image builds can take longer than five minutes. The evaluator and post-load reused-stack check were verified locally on 2026-10-24; see the evidence boundaries below.
 
-## 3. Core Domain Invariants & Guarantees
+For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `docker compose -f deploy/compose.yaml up --build -d`. Both services are HS256 resource servers; an external trusted issuer must supply `sub`, `exp`, and `roles`. Customer projection access additionally requires signed `accounts` claims. This repository does not provide login, password storage, refresh tokens, or revocation.
 
-### 1. Conservation of Money (Double-Entry Zero-Sum)
-Every transfer consists of a balanced pair of postings where debits are signed negative and credits positive:
-$$\sum_{i} \text{amount\_minor}_i = 0$$
-Enforced at the application service layer **AND** guaranteed by a PostgreSQL deferred constraint trigger (`trg_postings_zero_sum`). If any transaction attempts to commit an unbalanced posting, PostgreSQL aborts the commit.
+## Test
 
-### 2. Deadlock Elimination via Deterministic UUID Ordering
-Pessimistic row locking acquires locks in lexicographically sorted UUID order:
-$$\min(\text{fromAccountId}, \text{toAccountId}) \longrightarrow \max(\text{fromAccountId}, \text{toAccountId})$$
-Eliminating circular lock dependencies guarantees zero database deadlocks under high concurrency.
-
-### 3. Non-Negative Balances
-Every standard `CUSTOMER` account balance is guarded by a PostgreSQL check constraint:
-$$\text{CHECK} \ (\text{account\_type} = \text{'OVERDRAFT'} \lor \text{balance\_minor} \ge 0)$$
-
-### 4. Principal-Scoped Idempotency & Replay Safety
-- Composite unique constraint on `(transactions.principal_id, transactions.idempotency_key)` allows two principals to use the same external key without collision.
-- Concurrent duplicate requests block on insertion, and one succeeds while the duplicate returns the original cached result.
-- Payload integrity: SHA-256 hash comparison ensures that reusing an idempotency key with different parameters immediately raises `HTTP 422 Unprocessable Entity`.
-
-### 5. Immutability of Postings
-Postings are strictly append-only. `UPDATE` and `DELETE` queries are blocked by database triggers. Corrections are performed via reversing transactions.
-
-### 6. Guaranteed At-Least-Once Async Relay
-The Outbox Relay poller queries:
-```sql
-SELECT * FROM outbox 
-WHERE published_at IS NULL 
-ORDER BY id ASC 
-FOR UPDATE SKIP LOCKED 
-LIMIT :batchSize
-```
-Ensures zero message loss, no dual-write hazards, and clean horizontal scaling across multiple relay instances.
-
----
-
-## 4. Repository Layout
-
-```
-ledgerline/
-├── README.md                                  # System architecture, invariants, and operations
-├── docs/
-│   ├── DECISIONS.md                           # Architecture Decision Records (ADRs)
-│   └── experiments/
-│       ├── 01-isolation.md                    # Isolation benchmarks & lost update proof
-│       ├── 02-failure-injection.md            # Chaos & fault injection reports
-│       └── 03-cloud-load.md                   # Cloud load test results & cost breakdown
-├── ledger-service/                            # Write side: core ledger, API & outbox relay
-│   ├── pom.xml
-│   └── src/main/java/com/ledgerline/ledger/
-│       ├── domain/                            # Account, Balance, Transaction, Posting models
-│       ├── repository/                        # Spring Data JDBC repositories
-│       ├── service/strategy/                  # 4 Isolation strategies (Variants 0, 1, 2, 3)
-│       ├── relay/                             # OutboxRelayPoller (SKIP LOCKED -> Kafka)
-│       └── api/                               # REST endpoints & GlobalExceptionHandler
-├── projection-service/                        # Read side: balance projection & statement view
-│   ├── pom.xml
-│   └── src/main/java/com/ledgerline/projection/
-│       ├── consumer/                          # Kafka consumer with manual offset commit
-│       ├── model/                             # StatementViewEntry, DailyAccountSummary
-│       └── service/                           # Idempotent projection engine
-├── bench/                                     # Workloads & benchmarking tools
-│   ├── k6-isolation-test.js                   # Low vs High contention isolation test
-│   ├── k6-cloud-load.js                       # Sustained high-volume cloud load test
-│   └── smoke-test.sh                          # End-to-end integration smoke script
-├── deploy/                                    # Infrastructure & deployment
-│   ├── compose.yaml                           # Local stack: Postgres, Kafka, Prometheus, Toxiproxy
-│   ├── Dockerfile.ledger
-│   ├── Dockerfile.projection
-│   ├── main.tf                                # Single-file Terraform for minimal AWS cloud
-│   └── prometheus/prometheus.yml              # Metrics scraping configuration
-└── .github/workflows/
-    ├── ci.yml                                 # CI automated test pipeline
-    └── deploy.yml                             # Cloud deployment on release tag
+```powershell
+.\mvnw.cmd clean verify -Pcoverage --batch-mode
 ```
 
----
+Integration, concurrency, property, and Kafka failure tests require real Docker infrastructure. Unavailable infrastructure is a failed/unverified run, never a pass. CI runs the suite, builds images, emits SBOMs, and gates HIGH/CRITICAL Trivy findings against explicit, tested, expiring applicability decisions while preserving raw scan results. New local changes have no remote CI evidence until explicitly published.
 
-## 5. Quickstart: Running Locally
+## Documentation
 
-### Prerequisites
-- Java 21+
-- Docker & Docker Compose
-- A JWT signed with `JWT_SECRET`, containing `sub` and `roles` (`CUSTOMER` or `OPERATOR`). Projection access for customers also requires an `accounts` claim containing permitted account UUIDs.
+- [Architecture](docs/ARCHITECTURE.md)
+- [Security boundaries](docs/SECURITY.md)
+- [Financial invariants](docs/FINANCIAL_INVARIANTS.md)
+- [API usage](docs/api-examples.md)
+- [Database and deployment](docs/DATABASE_DEPLOYMENT.md)
+- [Testing and failure matrix](docs/TESTING.md)
+- [Evidence boundaries](docs/EVIDENCE.md)
+- [Image vulnerability applicability](security/README.md)
+- [Isolation experiment method](docs/experiments/01-isolation.md)
 
-### Start the Infrastructure & Services
-```bash
-# 1. Start PostgreSQL, Kafka, Toxiproxy, Prometheus, Grafana, and Ledgerline services
-cd deploy
-JWT_SECRET='replace-with-at-least-32-random-bytes' docker compose up -d
-
-# 2. Verify health
-curl -s http://localhost:8080/actuator/health | jq .
-curl -s http://localhost:8081/actuator/health | jq .
-
-# 3. Run automated smoke tests
-cd ../bench
-ACCESS_TOKEN="$JWT_ACCESS_TOKEN" bash smoke-test.sh
-```
-
-All business endpoints are under `/api/v1`. OpenAPI JSON is available at `/v3/api-docs` and Swagger UI at `/swagger-ui.html`. Application and security errors use `application/problem+json` (RFC 7807). Account postings and projection statements use `limit` plus an opaque `cursor` rather than offset pagination.
-
----
-
-## 6. Running Tests
-
-```bash
-# Run unit, concurrency, isolation, and property tests
-./mvnw clean test
-
-# Run specific test suites:
-./mvnw test -Dtest=DatabaseConstraintInvariantTest    # Database triggers & constraints
-./mvnw test -Dtest=ConcurrentTransferStressTest        # 50 threads x transfers invariant check
-./mvnw test -Dtest=IsolationExperimentTest             # Lost updates in Variant 0 vs 1-3
-./mvnw test -Dtest=DoubleEntryPropertyTest             # jqwik 1000 randomized property tests
-./mvnw test -Dtest=ProjectionDeduplicationTest         # Kafka redelivery deduplication
-```
-
----
-
-## 7. Isolation Experiment Results (Summary)
-
-| Metric | Variant 0 (Broken) | Variant 1 (Pessimistic) | Variant 2 (Optimistic) | Variant 3 (Serializable) |
-| :--- | :--- | :--- | :--- | :--- |
-| **Concurrency Model** | Read-then-write | `FOR UPDATE` (sorted UUIDs) | Version check + retry | SSI + retry on `40001` |
-| **Balance Invariant** | **FAILS** — `IsolationExperimentTest.demonstrateLostUpdateAnomalyInVariant0` asserts drift reproduces in a committed test run | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI | **PASSES** — zero drift, asserted in CI |
-| **High-contention RPS / p95 / p99** | 1.8/s / 20,328.5ms / 22,290.2ms | 258.9/s / 170.9ms / 226.0ms | 60.4/s / 1,383.0ms / 2,353.8ms | 50.0/s / 2,341.7ms / 3,403.8ms |
-| **High-contention failure rate** | 89.3% | 0% | 13.5% | 13.4% |
-
-Correctness rows are backed by tests that run in CI on every push. Performance rows are from one real local k6 run against `docker compose -f deploy/compose.yaml` (50 low-contention / 3 high-contention accounts, 20 VUs, 30s per regime) — see [docs/experiments/01-isolation.md](docs/experiments/01-isolation.md) §4 for the full low+high tables, environment caveats, and the committed raw JSON under `bench/results/` each number is computed from.
-
----
-
-## 8. Failure Testing Matrix (Summary)
-
-- **Worker Crash Mid-Publish**: Relay crashes after publishing to Kafka before marking row published $\to$ event re-published on next poll. Verified against a real Kafka Testcontainer via `AsyncFailureAndResilienceTest.shouldRepublishAfterSimulatedCrashBetweenSendAndMarkPublished`; the dedup half is verified separately by `ProjectionDeduplicationTest` (not yet one end-to-end run through a live consumer — see 02-failure-injection.md §3.1).
-- **Message Redelivery**: Consumer crashes after DB commit before Kafka offset commit $\to$ redelivery detected, projection updated exactly once. Verified by `ProjectionDeduplicationTest` against a real Postgres Testcontainer.
-- **Kafka Outage**: Broker unreachable $\to$ transfers commit synchronously to DB; outbox backlog accumulates; backlog drains completely once the broker recovers. Verified against a real, paused-then-unpaused Kafka Testcontainer broker (not a mock) in `AsyncFailureAndResilienceTest.shouldAccumulateOutboxBacklogWhenKafkaIsDownAndDrainAfterRecovery`.
-- **Partial Failure / DB Outage**: Toxiproxy-based DB outage testing is **not implemented** — the dependency is declared in `pom.xml` but no test uses it yet. Not claimed as verified.
-- **Property-Based Testing**: jqwik-generated random traces executed against the real `TransferService` + a real Postgres database (not an in-memory oracle) $\to$ zero invariant violations across all committed runs. See `DoubleEntryPropertyTest`.
-
-*Full details in [docs/experiments/02-failure-injection.md](docs/experiments/02-failure-injection.md).*
-
----
-
-## 9. Observability & Metrics
-
-Prometheus metrics exposed at `http://localhost:8080/actuator/prometheus`:
-- `ledger.transfers.latency`: Latency histogram tagged by `variant` and `outcome`.
-- `ledger.transfers.outcomes`: Counter of transfer outcomes (`success`, `insufficient_funds`, `idempotent_replay`, `idempotency_conflict`, `error`).
-- `ledger.outbox.backlog.size`: Real-time gauge of unpublished outbox events.
-- `ledger.outbox.oldest_unpublished_age_seconds`: Age in seconds of oldest unpublished event.
-
-**Not yet implemented**: consumer-lag metric, and lock-wait/serialization-failure/deadlock counters (`pg_stat_database`). Listed here as gaps, not as shipped metrics.
-
----
-
-## 10. Known Limitations & Future Work
-1. **Single-Currency Transfers**: Currently, transfers require matching currencies between accounts. Multi-currency support can be implemented via an explicit FX posting pair with an intermediary exchange account.
-2. **Reversals & Holds**: Two-phase authorisations (auth $\to$ capture) can be modeled as temporary balance holds preceding final postings.
-3. **Partitioned Outbox**: For workloads exceeding 50,000 transfers/sec, outbox table partitioning by hash or date allows concurrent bulk drain workers.
-
----
-
-## 11. CI, Images, and Evidence
-
-CI runs the Maven verification suite with JaCoCo reporting, builds both Docker images, emits SPDX SBOMs, and publishes HIGH/CRITICAL Trivy scan results without suppressing findings. The recorded local run in [`bench/results/02-local-verification.json`](bench/results/02-local-verification.json) has 19 passing ledger tests, 72.87% line coverage, and 178 SBOM packages per image. The committed Trivy reports currently contain one HIGH and three CRITICAL fixed-version findings per image; these are open findings, not a clean-scan claim.
-
-### Azure Evidence
-
-The Azure evidence run is documented in [`docs/experiments/03-cloud-load.md`](docs/experiments/03-cloud-load.md). Reviewable artifacts are committed as compact logs and summaries:
-
-- [`bench/results/03-azure-manual-evidence-summary.json`](bench/results/03-azure-manual-evidence-summary.json)
-- [`bench/results/03-azure-smoke.log`](bench/results/03-azure-smoke.log)
-- [`bench/results/03-azure-k6.log`](bench/results/03-azure-k6.log)
-- [`bench/results/03-azure-postgres-invariants.log`](bench/results/03-azure-postgres-invariants.log)
-- [`bench/results/03-azure-manual-cleanup-summary.json`](bench/results/03-azure-manual-cleanup-summary.json)
-
-The raw k6 JSON stream `bench/results/03-azure-k6.json` is intentionally ignored because it is large; keep it as a release artifact or compressed external artifact if exact event-level replay is needed.
-
-The current Azure evidence run passed smoke checks, completed the low-cost `correctness` k6 profile with 7,508/7,508 successful HTTP transfers, 0.00% failure rate, and p95 258.2ms on `Standard_D2ls_v6`, ran the PostgreSQL invariant query afterward, and confirmed resource-group cleanup. Azure budget creation is documented as manual because the CLI consumption-budget command rejected the resource-group filter syntax for this subscription/API path; the run still used a short-lived resource group and confirmed deletion.
-
-The one-shot AWS workflow is manual and budget-gated. It verifies an existing ACTUAL-cost budget alert, deploys using GitHub secrets, runs smoke and k6 checks, queries RDS invariants through SSM, captures available Cost Explorer data, and destroys the stack in an `always()` step. It has not been executed in this revision because doing so requires a pushed workflow plus configured repository secrets, while this work is local-only. See [`bench/results/03-aws-run-status.json`](bench/results/03-aws-run-status.json). Portfolio and resume wording is derived only from these result files: [`docs/portfolio-card.md`](docs/portfolio-card.md) and [`docs/resume-line.md`](docs/resume-line.md).
+The database user in local Compose has administrative privileges. Direct SQL can alter balances without postings, append to old transactions, disable triggers, or truncate history. SQL administrators and Kafka publishers are trusted. Projection data is eventually consistent and is never the balance authority. No guarantee of exactly-once end-to-end processing, uninterrupted delivery, deadlock elimination across all strategies, or safe internet deployment is made.

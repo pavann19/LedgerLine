@@ -47,6 +47,11 @@ public class TransactionRepository {
             .update();
     }
 
+    public void lockIdempotencyKey(String scopedKey) {
+        jdbcClient.sql("SELECT pg_advisory_xact_lock(hashtextextended(CAST(? AS text), 1))")
+            .param(scopedKey).query((rs, rowNum) -> 0).single();
+    }
+
     public Optional<Transaction> findByIdempotencyKey(String idempotencyKey) {
         ScopedIdempotencyKey scopedKey = splitScopedKey(idempotencyKey);
         String sql = """
