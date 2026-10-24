@@ -42,7 +42,18 @@ public class SecurityConfig {
 
     @Bean
     JwtDecoder jwtDecoder(@Value("${ledger.security.jwt-secret}") String secret) {
-        return NimbusJwtDecoder.withSecretKey(new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256")).build();
+        if (secret.getBytes(StandardCharsets.UTF_8).length < 32) {
+            throw new IllegalArgumentException("JWT secret must contain at least 32 bytes");
+        }
+        NimbusJwtDecoder decoder = NimbusJwtDecoder.withSecretKey(
+            new SecretKeySpec(secret.getBytes(StandardCharsets.UTF_8), "HmacSHA256")).build();
+        decoder.setJwtValidator(new org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator<>(
+            org.springframework.security.oauth2.jwt.JwtValidators.createDefault(),
+            new org.springframework.security.oauth2.jwt.JwtClaimValidator<String>("sub",
+                sub -> sub != null && !sub.isBlank() && sub.indexOf('\u001F') < 0),
+            new org.springframework.security.oauth2.jwt.JwtClaimValidator<java.time.Instant>("exp",
+                exp -> exp != null)));
+        return decoder;
     }
 
     private Converter<Jwt, ? extends AbstractAuthenticationToken> jwtAuthenticationConverter() {

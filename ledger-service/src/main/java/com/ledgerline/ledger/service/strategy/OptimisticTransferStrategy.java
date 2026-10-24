@@ -58,11 +58,14 @@ public class OptimisticTransferStrategy implements TransferExecutionStrategy {
             attempts++;
             try {
                 return transactionTemplate.execute(status -> {
+                    support.lockIdempotencyKey(idempotencyKey);
                     // Re-check idempotency inside transaction
                     Optional<TransferResponse> replay = support.checkIdempotency(idempotencyKey, requestHash);
                     if (replay.isPresent()) {
                         return replay.get();
                     }
+
+                    support.validateLockedTransferRequest(request);
 
                     AccountBalance fromBalance = balanceRepository.findById(request.fromAccountId())
                         .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
@@ -89,7 +92,7 @@ public class OptimisticTransferStrategy implements TransferExecutionStrategy {
 
                     int fromUpdated = balanceRepository.updateBalanceOptimistic(
                         request.fromAccountId(),
-                        fromBalance.balanceMinor() - request.amountMinor(),
+                        Math.subtractExact(fromBalance.balanceMinor(), request.amountMinor()),
                         fromBalance.version()
                     );
                     if (fromUpdated == 0) {
@@ -98,7 +101,7 @@ public class OptimisticTransferStrategy implements TransferExecutionStrategy {
 
                     int toUpdated = balanceRepository.updateBalanceOptimistic(
                         request.toAccountId(),
-                        toBalance.balanceMinor() + request.amountMinor(),
+                        Math.addExact(toBalance.balanceMinor(), request.amountMinor()),
                         toBalance.version()
                     );
                     if (toUpdated == 0) {

@@ -45,6 +45,9 @@ public class TransferService {
         this.meterRegistry = meterRegistry;
         this.accountRepository = accountRepository;
         this.defaultVariant = IsolationVariant.valueOf(defaultVariantName);
+        if (this.defaultVariant == IsolationVariant.VARIANT_0_BROKEN) {
+            throw new IllegalArgumentException("The broken experimental strategy cannot be the default");
+        }
     }
 
     public TransferResponse transfer(
@@ -52,7 +55,7 @@ public class TransferService {
         TransferRequest request,
         IsolationVariant requestedVariant
     ) {
-        return transfer(idempotencyKey, request, requestedVariant, "SYSTEM", true);
+        return executeTransfer(idempotencyKey, request, requestedVariant, "SYSTEM", true, true);
     }
 
     public TransferResponse transfer(
@@ -62,11 +65,26 @@ public class TransferService {
         String principalId,
         boolean operator
     ) {
+        return executeTransfer(idempotencyKey, request, requestedVariant, principalId, operator, false);
+    }
+
+    private TransferResponse executeTransfer(String idempotencyKey, TransferRequest request,
+        IsolationVariant requestedVariant, String principalId, boolean operator, boolean internal) {
+        if (principalId == null || principalId.isBlank() || principalId.indexOf('\u001F') >= 0) {
+            throw new IllegalArgumentException("Invalid principal");
+        }
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 128
+            || idempotencyKey.chars().anyMatch(Character::isISOControl)) {
+            throw new IllegalArgumentException("Idempotency-Key must be 1-128 characters without control characters");
+        }
+        if (!internal && requestedVariant == IsolationVariant.VARIANT_0_BROKEN) {
+            throw new IllegalArgumentException("The broken isolation variant is available only to internal experiments");
+        }
         var from = accountRepository.findById(request.fromAccountId()).orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
         if (!operator && !from.ownerPrincipal().equals(principalId)) {
             throw new AccessDeniedException("Source account is not owned by the authenticated principal");
         }
-        String scopedKey = principalId.equals("SYSTEM") ? idempotencyKey : principalId + '\u001F' + idempotencyKey;
+        String scopedKey = internal ? idempotencyKey : principalId + '\u001F' + idempotencyKey;
         IsolationVariant variant = requestedVariant != null ? requestedVariant : defaultVariant;
         TransferExecutionStrategy strategy = strategies.get(variant);
         if (strategy == null) {

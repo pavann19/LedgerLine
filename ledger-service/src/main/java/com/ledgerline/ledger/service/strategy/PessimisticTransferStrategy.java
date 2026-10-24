@@ -52,11 +52,14 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
 
         try {
             return transactionTemplate.execute(status -> {
+                    support.lockIdempotencyKey(idempotencyKey);
                 // Check idempotency inside transaction in case it was just committed
                 Optional<TransferResponse> replay = support.checkIdempotency(idempotencyKey, requestHash);
                 if (replay.isPresent()) {
                     return replay.get();
                 }
+
+                support.validateLockedTransferRequest(request);
 
                 // Deterministic Lock Acquisition: Lowest UUID first to eliminate deadlocks
                 UUID fromId = request.fromAccountId();
@@ -69,6 +72,12 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                     .orElseThrow(() -> new AccountNotFoundException(firstLockId));
                 AccountBalance secondBalance = balanceRepository.findByIdForUpdate(secondLockId)
                     .orElseThrow(() -> new AccountNotFoundException(secondLockId));
+
+                // A duplicate may have committed while this request waited for the locks.
+                Optional<TransferResponse> lockedReplay = support.checkIdempotency(idempotencyKey, requestHash);
+                if (lockedReplay.isPresent()) {
+                    return lockedReplay.get();
+                }
 
                 AccountBalance fromBalance = fromFirst ? firstBalance : secondBalance;
                 AccountBalance toBalance = fromFirst ? secondBalance : firstBalance;
@@ -95,14 +104,14 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                 // Update cached balances
                 balanceRepository.updateBalance(new AccountBalance(
                     fromId,
-                    fromBalance.balanceMinor() - request.amountMinor(),
+                    Math.subtractExact(fromBalance.balanceMinor(), request.amountMinor()),
                     fromBalance.accountType(),
                     fromBalance.version() + 1
                 ));
 
                 balanceRepository.updateBalance(new AccountBalance(
                     toId,
-                    toBalance.balanceMinor() + request.amountMinor(),
+                    Math.addExact(toBalance.balanceMinor(), request.amountMinor()),
                     toBalance.accountType(),
                     toBalance.version() + 1
                 ));

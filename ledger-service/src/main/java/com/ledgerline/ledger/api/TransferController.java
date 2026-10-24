@@ -28,6 +28,9 @@ public class TransferController {
         @RequestHeader(value = "X-Isolation-Variant", required = false) IsolationVariant requestedVariant,
         @Valid @RequestBody TransferRequest request
     ) {
+        if (requestedVariant == IsolationVariant.VARIANT_0_BROKEN) {
+            throw new IllegalArgumentException("The broken isolation variant is available only to internal experiments");
+        }
         TransferResponse response = transferService.transfer(idempotencyKey, request, requestedVariant, currentPrincipal.id(), currentPrincipal.isOperator());
         HttpStatus status = response.idempotentReplay() ? HttpStatus.OK : HttpStatus.CREATED;
         return ResponseEntity.status(status).body(response);
