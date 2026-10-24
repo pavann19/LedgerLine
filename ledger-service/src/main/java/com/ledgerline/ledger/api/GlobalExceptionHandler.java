@@ -21,7 +21,7 @@ public class GlobalExceptionHandler {
     ResponseEntity<ProblemDetail> idempotency(IdempotencyConflictException e, HttpServletRequest r) { return problem(HttpStatus.UNPROCESSABLE_ENTITY,"idempotency-conflict","Idempotency conflict",e.getMessage(),r,null); }
     @ExceptionHandler(AccountNotFoundException.class)
     ResponseEntity<ProblemDetail> missing(AccountNotFoundException e, HttpServletRequest r) { return problem(HttpStatus.NOT_FOUND,"account-not-found","Account not found",e.getMessage(),r,null); }
-    @ExceptionHandler({InvalidTransferException.class, IllegalArgumentException.class})
+    @ExceptionHandler({InvalidTransferException.class, IllegalArgumentException.class, ArithmeticException.class})
     ResponseEntity<ProblemDetail> invalid(RuntimeException e, HttpServletRequest r) { return problem(HttpStatus.BAD_REQUEST,"invalid-request","Invalid request",e.getMessage(),r,null); }
     @ExceptionHandler(AccessDeniedException.class)
     ResponseEntity<ProblemDetail> forbidden(AccessDeniedException e, HttpServletRequest r) { return problem(HttpStatus.FORBIDDEN,"forbidden","Forbidden",e.getMessage(),r,null); }
@@ -32,6 +32,12 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ProblemDetail> integrity(DataIntegrityViolationException e, HttpServletRequest r) { return problem(HttpStatus.CONFLICT,"data-integrity-violation","Data integrity violation","A database constraint rejected the request",r,null); }
+    @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,
+        org.springframework.web.bind.MissingRequestHeaderException.class,
+        org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
+    ResponseEntity<ProblemDetail> malformed(Exception e, HttpServletRequest r) {
+        return problem(HttpStatus.BAD_REQUEST, "invalid-request", "Invalid request", "Malformed or missing request parameters", r, null);
+    }
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> general(Exception e, HttpServletRequest r) { return problem(HttpStatus.INTERNAL_SERVER_ERROR,"internal-error","Internal server error","The request could not be completed",r,null); }
     private ResponseEntity<ProblemDetail> problem(HttpStatus s,String type,String title,String detail,HttpServletRequest r,Map<String,String> errors){

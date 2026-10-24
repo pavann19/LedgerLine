@@ -13,7 +13,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.time.LocalDate;
-import java.time.ZoneOffset;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -46,42 +46,28 @@ public class ProjectionService {
             return false;
         }
 
-        LocalDate summaryDate = payload.timestamp().atZone(ZoneOffset.UTC).toLocalDate();
+        List<UUID> affectedAccounts = java.util.stream.Stream.of(payload.fromAccountId(), payload.toAccountId())
+            .distinct()
+            .sorted(Comparator.comparing(UUID::toString))
+            .toList();
+        affectedAccounts.forEach(projectionRepository::lockAccount);
 
         // 1. Project Debit (fromAccount: negative flow)
-        long fromPrevBalance = projectionRepository.getLatestRunningBalance(payload.fromAccountId());
-        long fromNewBalance = fromPrevBalance - payload.amountMinor();
-        projectionRepository.insertStatementView(
+        projectionRepository.insertAndProjectPosting(
             payload.fromAccountId(),
             payload.transactionId(),
             -payload.amountMinor(),
-            fromNewBalance,
             payload.currency(),
             payload.timestamp()
-        );
-        projectionRepository.upsertDailySummary(
-            payload.fromAccountId(),
-            summaryDate,
-            -payload.amountMinor(),
-            fromNewBalance
         );
 
         // 2. Project Credit (toAccount: positive flow)
-        long toPrevBalance = projectionRepository.getLatestRunningBalance(payload.toAccountId());
-        long toNewBalance = toPrevBalance + payload.amountMinor();
-        projectionRepository.insertStatementView(
+        projectionRepository.insertAndProjectPosting(
             payload.toAccountId(),
             payload.transactionId(),
             payload.amountMinor(),
-            toNewBalance,
             payload.currency(),
             payload.timestamp()
-        );
-        projectionRepository.upsertDailySummary(
-            payload.toAccountId(),
-            summaryDate,
-            payload.amountMinor(),
-            toNewBalance
         );
 
         log.debug("Successfully projected event {} for transaction {}", payload.eventId(), payload.transactionId());

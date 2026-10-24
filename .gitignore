@@ -14,3 +14,13 @@ target/
 .terraform/
 ledger-service/.jqwik-database
 bench/results/03-azure-k6.json
+bench/results/local-demo-summary.json
+bench/results/local-demo-summary.previous.json
+
+# Generated/local evidence (tokens and cloud metadata must stay private)
+bench/results/02-*
+bench/results/03-*
+
+__pycache__/
+*.pyc
+.security-test-evidence/

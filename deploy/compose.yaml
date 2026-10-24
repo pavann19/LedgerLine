@@ -7,7 +7,7 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -20,7 +20,7 @@ services:
     image: apache/kafka:3.8.0
     container_name: ledgerline-kafka
     ports:
-      - "9092:9092"
+      - "127.0.0.1:9092:9092"
     environment:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
@@ -37,15 +37,16 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list"]
       interval: 10s
-      timeout: 5s
-      retries: 5
+      timeout: 15s
+      start_period: 60s
+      retries: 12
 
   toxiproxy:
     image: ghcr.io/shopify/toxiproxy:2.9.0
     container_name: ledgerline-toxiproxy
     ports:
-      - "8474:8474" # Management API
-      - "5433:5433" # Proxied Postgres port for chaos testing
+      - "127.0.0.1:8474:8474" # Management API
+      - "127.0.0.1:5433:5433" # Proxied Postgres port for chaos testing
     depends_on:
       postgres:
         condition: service_healthy
@@ -54,7 +55,7 @@ services:
     image: prom/prometheus:v2.53.0
     container_name: ledgerline-prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     command:
@@ -65,7 +66,7 @@ services:
     image: grafana/grafana:11.1.0
     container_name: ledgerline-grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
@@ -78,7 +79,7 @@ services:
       dockerfile: deploy/Dockerfile.ledger
     container_name: ledgerline-ledger-service
     ports:
-      - "8080:8080"
+      - "127.0.0.1:8080:8080"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ledgerline
       SPRING_DATASOURCE_USERNAME: postgres
@@ -87,6 +88,11 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       LEDGER_OUTBOX_RELAY_ENABLED: "true"
       LEDGER_OUTBOX_RELAY_DELAY_MS: 200
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     depends_on:
       postgres:
         condition: service_healthy
@@ -99,7 +105,7 @@ services:
       dockerfile: deploy/Dockerfile.projection
     container_name: ledgerline-projection-service
     ports:
-      - "8081:8081"
+      - "127.0.0.1:8081:8081"
     environment:
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ledgerline
       SPRING_DATASOURCE_USERNAME: postgres
@@ -107,6 +113,8 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
+      ledger-service:
+        condition: service_healthy
       postgres:
         condition: service_healthy
       kafka:

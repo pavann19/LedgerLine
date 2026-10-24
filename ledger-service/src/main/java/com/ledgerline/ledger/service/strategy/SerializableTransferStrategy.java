@@ -59,10 +59,13 @@ public class SerializableTransferStrategy implements TransferExecutionStrategy {
             attempts++;
             try {
                 return serializableTemplate.execute(status -> {
+                    support.lockIdempotencyKey(idempotencyKey);
                     Optional<TransferResponse> replay = support.checkIdempotency(idempotencyKey, requestHash);
                     if (replay.isPresent()) {
                         return replay.get();
                     }
+
+                    support.validateLockedTransferRequest(request);
 
                     AccountBalance fromBalance = balanceRepository.findById(request.fromAccountId())
                         .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
@@ -89,14 +92,14 @@ public class SerializableTransferStrategy implements TransferExecutionStrategy {
 
                     balanceRepository.updateBalance(new AccountBalance(
                         request.fromAccountId(),
-                        fromBalance.balanceMinor() - request.amountMinor(),
+                        Math.subtractExact(fromBalance.balanceMinor(), request.amountMinor()),
                         fromBalance.accountType(),
                         fromBalance.version() + 1
                     ));
 
                     balanceRepository.updateBalance(new AccountBalance(
                         request.toAccountId(),
-                        toBalance.balanceMinor() + request.amountMinor(),
+                        Math.addExact(toBalance.balanceMinor(), request.amountMinor()),
                         toBalance.accountType(),
                         toBalance.version() + 1
                     ));

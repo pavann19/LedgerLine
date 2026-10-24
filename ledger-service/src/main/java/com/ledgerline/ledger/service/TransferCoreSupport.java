@@ -53,6 +53,13 @@ public class TransferCoreSupport {
         this.currentPrincipal = currentPrincipal;
     }
 
+    public void validateLockedTransferRequest(TransferRequest request) {
+        java.util.stream.Stream.of(request.fromAccountId(), request.toAccountId()).distinct().sorted()
+            .forEach(id -> accountRepository.findByIdForShare(id)
+                .orElseThrow(() -> new AccountNotFoundException(id)));
+        validateTransferRequest(request);
+    }
+
     public void validateTransferRequest(TransferRequest request) {
         if (request.fromAccountId().equals(request.toAccountId())) {
             throw new InvalidTransferException("Source and destination accounts must be distinct");
@@ -73,7 +80,7 @@ public class TransferCoreSupport {
             throw new InvalidTransferException("Destination account is not ACTIVE: " + toAccount.status());
         }
 
-        String reqCurrency = request.currency().trim().toUpperCase();
+        String reqCurrency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
         if (!fromAccount.currency().equalsIgnoreCase(reqCurrency) || !toAccount.currency().equalsIgnoreCase(reqCurrency)) {
             throw new InvalidTransferException(
                 String.format("Currency mismatch: request=%s, from=%s, to=%s",
@@ -108,6 +115,10 @@ public class TransferCoreSupport {
         ));
     }
 
+    public void lockIdempotencyKey(String scopedKey) {
+        transactionRepository.lockIdempotencyKey(scopedKey);
+    }
+
     public TransferResponse recordTransactionAndPostings(
         UUID transactionId,
         String idempotencyKey,
@@ -126,7 +137,7 @@ public class TransferCoreSupport {
         transactionRepository.insertTransaction(tx);
 
         // 2. Insert Balanced Double-Entry Postings (Zero-Sum Invariant: -amount + amount = 0)
-        String currency = request.currency().trim().toUpperCase();
+        String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
         Posting debitPosting = new Posting(
             null,
             transactionId,

@@ -22,7 +22,7 @@ public class RequestHasher {
             buffer.putLong(request.toAccountId().getLeastSignificantBits());
             buffer.putLong(request.amountMinor());
             digest.update(buffer.array());
-            digest.update(request.currency().trim().toUpperCase().getBytes(StandardCharsets.UTF_8));
+            digest.update(request.currency().trim().toUpperCase(java.util.Locale.ROOT).getBytes(StandardCharsets.UTF_8));
             return digest.digest();
         } catch (NoSuchAlgorithmException e) {
             throw new IllegalStateException("SHA-256 algorithm not available", e);
