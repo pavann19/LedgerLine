@@ -84,8 +84,11 @@ def main():
         time.sleep(1)
     for identifier, expected in ((a["id"], 87500), (b["id"], 12500), (funding["id"], -100000)):
         assert call("accounts/" + identifier, operator)["balanceMinor"] == expected
+    projection = json.loads(subprocess.check_output(
+        ["docker", "inspect", "ledgerline-projection-service"], text=True))[0]
     print(json.dumps({"result": "PASS", "http_checks": count, "replay_original": True,
-                      "projection_caught_up": True, "balances": [87500, 12500, -100000]}))
+                      "projection_caught_up": True, "balances": [87500, 12500, -100000],
+                      "images": {"ledger": config["Image"], "projection": projection["Image"]}}))
 
 
 if __name__ == "__main__":
