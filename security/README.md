@@ -10,4 +10,6 @@ The decision expires on 2026-11-23 and applies only to the exact package/version
 
 CI downloads the same run's surefire artifact after the full test job succeeds. Local replay of an older raw report is a policy test, not a current image scan. The build must always scan its exact image anew.
 
+Review on 2026-10-24 rechecked both upstream advisories, both services' MVC boundary guards and their unsafe-view/SSE negative controls. Published CI run [40068424035](https://github.com/pavann19/LedgerLine/actions/runs/40068424035) passed the full suite and both exact-image gates. The existing 2026-11-23 expiry is unchanged. This review does not authorize new view/SSE features or claim the affected library version is patched. Before expiry, check supported fixed dependencies, repeat the boundary tests and exact-image scans, and update or remove each decision based on that evidence; do not automatically extend the dates.
+
 A second exact-version decision covers CVE-2026-47890 (SSE view-fragment stream corruption). Neither service exposes SSE or view fragments; return-type checks and an unsafe SSE fixture guard this condition in both modules. Reference: https://spring.io/security/cve-2026-47890/

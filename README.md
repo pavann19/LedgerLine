@@ -32,10 +32,11 @@ For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `do
 .\mvnw.cmd clean verify -Pcoverage --batch-mode
 ```
 
-Integration, concurrency, property, and Kafka failure tests require real Docker infrastructure. Unavailable infrastructure is a failed/unverified run, never a pass. CI runs the suite, builds images, emits SBOMs, and gates HIGH/CRITICAL Trivy findings against explicit, tested, expiring applicability decisions while preserving raw scan results. New local changes have no remote CI evidence until explicitly published.
+Integration, concurrency, property, and Kafka failure tests require real Docker infrastructure. Unavailable infrastructure is a failed/unverified run, never a pass. CI runs the suite, builds images, emits SBOMs, and gates HIGH/CRITICAL Trivy findings against explicit, tested, expiring applicability decisions while preserving raw scan results. [Verified release checks](https://github.com/pavann19/LedgerLine/actions/runs/40068424035) passed 53 Java tests, four policy tests, and both image gates. See [evidence boundaries](docs/EVIDENCE.md) for the exact tested revision.
 
 ## Documentation
 
+- [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)
 - [Financial invariants](docs/FINANCIAL_INVARIANTS.md)
