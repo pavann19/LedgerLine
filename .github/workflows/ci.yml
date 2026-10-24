@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, 'codex/**' ]
+    branches: [ main, master, financial-release-audit ]
   pull_request:
     branches: [ main, master ]
 
