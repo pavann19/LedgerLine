@@ -44,7 +44,7 @@ public class ProjectionController {
         Authentication authentication
     ) {
         authorizer.requireAccess(authentication, id);
-        LocalDate queryDate = date != null ? date : LocalDate.now();
+        LocalDate queryDate = date != null ? date : LocalDate.now(java.time.ZoneOffset.UTC);
         return projectionService.getDailySummary(id, queryDate)
             .map(ResponseEntity::ok)
             .orElse(ResponseEntity.notFound().build());

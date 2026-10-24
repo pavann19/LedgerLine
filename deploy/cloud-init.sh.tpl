@@ -2,7 +2,8 @@
 # Rendered by Terraform's templatefile() with: aws_region, ecr_registry, image_tag,
 # db_endpoint, db_password, jwt_secret. Runs once at EC2 first boot to actually stand up the app,
 # not just install Docker.
-set -euxo pipefail
+set -euo pipefail
+umask 077
 
 dnf update -y
 dnf install -y docker git aws-cli
@@ -10,7 +11,7 @@ systemctl enable --now docker
 usermod -aG docker ec2-user
 
 # psql client, so the invariant-check SQL queries can be run directly against RDS from here
-# (RDS is not publicly accessible — reach this host via SSM Session Manager, not SSH).
+# (RDS is not publicly accessible â€” reach this host via SSM Session Manager, not SSH).
 dnf install -y postgresql16 || dnf install -y postgresql15 || true
 
 # Docker Compose v2 plugin (arm64 build, matching the t4g/Graviton2 host).
@@ -19,7 +20,7 @@ curl -SL "https://github.com/docker/compose/releases/download/v2.29.7/docker-com
   -o /usr/local/lib/docker/cli-plugins/docker-compose
 chmod +x /usr/local/lib/docker/cli-plugins/docker-compose
 
-# Authenticate to ECR using the instance's IAM role — no long-lived credentials on the box.
+# Authenticate to ECR using the instance's IAM role â€” no long-lived credentials on the box.
 aws ecr get-login-password --region "${aws_region}" \
   | docker login --username AWS --password-stdin "${ecr_registry}"
 
@@ -46,6 +47,11 @@ services:
   ledger-service:
     image: ${ecr_registry}/ledgerline/ledger-service:${image_tag}
     container_name: ledgerline-ledger-service
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O - http://127.0.0.1:8080/actuator/health | grep -q '\"status\":\"UP\"'"]
+      interval: 5s
+      timeout: 5s
+      retries: 24
     ports:
       - "8080:8080"
     environment:
@@ -72,7 +78,10 @@ services:
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       JWT_SECRET: "${jwt_secret}"
     depends_on:
-      - kafka
+      kafka:
+        condition: service_started
+      ledger-service:
+        condition: service_healthy
     restart: unless-stopped
 
   prometheus:

@@ -33,7 +33,7 @@ management:
         include: health,info,metrics,prometheus
   endpoint:
     health:
-      show-details: always
+      show-details: never
   metrics:
     tags:
       application: ${spring.application.name}

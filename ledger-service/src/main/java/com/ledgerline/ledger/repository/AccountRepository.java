@@ -53,6 +53,11 @@ public class AccountRepository {
         return jdbcClient.sql(sql).param(id).query(rowMapper).optional();
     }
 
+    public Optional<Account> findByIdForShare(UUID id) {
+        return jdbcClient.sql("SELECT id, currency, type, status, created_at, version, owner_principal FROM accounts WHERE id = ? FOR SHARE")
+            .param(id).query(rowMapper).optional();
+    }
+
     public boolean existsById(UUID id) {
         String sql = "SELECT COUNT(1) FROM accounts WHERE id = ?";
         Integer count = jdbcClient.sql(sql).param(id).query(Integer.class).single();

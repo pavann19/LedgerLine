@@ -26,5 +26,6 @@ public abstract class BaseProjectionIntegrationTest {
         registry.add("spring.datasource.username", postgres::getUsername);
         registry.add("spring.datasource.password", postgres::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
+        registry.add("spring.kafka.listener.auto-startup", () -> "false");
     }
 }
