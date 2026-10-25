@@ -9,9 +9,9 @@ $options = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-
 
 # Only use the disposable Azure host already provisioned by the evidence runner.
 # The host must already contain /tmp/invariants.sql from its baseline verification.
-Get-Content (Join-Path $repo 'bench/k6-cloud-load.js') -Raw | & ssh.exe @options $target 'cat > /tmp/k6-cloud-load.js'
+& scp.exe @options (Join-Path $repo 'bench/k6-cloud-load.js') "${target}:/tmp/k6-cloud-load.js"
 if ($LASTEXITCODE -ne 0) { throw 'Workload upload failed' }
-Get-Content (Join-Path $PSScriptRoot 'verify-cloud-recovery.py') -Raw | & ssh.exe @options $target 'cat > /tmp/verify-cloud-recovery.py'
+& scp.exe @options (Join-Path $PSScriptRoot 'verify-cloud-recovery.py') "${target}:/tmp/verify-cloud-recovery.py"
 if ($LASTEXITCODE -ne 0) { throw 'Recovery probe upload failed' }
 & ssh.exe @options $target 'sudo python3 /tmp/verify-cloud-recovery.py' *> (Join-Path $EvidenceDirectory '04-recovery.log')
 $probeExit = $LASTEXITCODE

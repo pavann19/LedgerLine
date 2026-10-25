@@ -30,6 +30,8 @@ def main():
     db_env = {**os.environ, 'PGPASSWORD': env['SPRING_DATASOURCE_PASSWORD'], 'PGSSLMODE': 'require'}
     db_args = ['-h', url.hostname, '-U', env['SPRING_DATASOURCE_USERNAME']]
     report = {'source_image': config['Image'], 'events': []}
+    report['workload_sha256'] = hashlib.sha256(Path('/tmp/k6-cloud-load.js').read_bytes()).hexdigest()
+    report['probe_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
 
     def record(name, **values):
         item = {'check': name, **values}
