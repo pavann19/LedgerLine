@@ -23,7 +23,7 @@ try {
 python3 /tmp/verify-cloud-recovery.py > /tmp/verify-cloud-recovery.log 2>&1
 printf '%s\n' "$?" > /tmp/verify-cloud-recovery.exit
 '@
-    $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($launcher))
+    $payload = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($launcher.Replace("`r", '')))
     $launchCommand = "printf '%s' '$payload' | base64 -d > /tmp/run-cloud-recovery.sh; sudo nohup sh /tmp/run-cloud-recovery.sh < /dev/null > /tmp/cloud-recovery-launcher.log 2>&1 &"
     & ssh.exe @options $target $launchCommand
     if ($LASTEXITCODE -ne 0) { throw 'Detached recovery probe launch failed' }
