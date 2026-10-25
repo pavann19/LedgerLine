@@ -60,7 +60,7 @@ The unchanged k6 correctness profile exercises synchronous transfer responses; i
 
 `ProjectionDeduplicationTest` additionally compares incremental balances with a full-history SQL oracle across late, cross-day, and equal-timestamp events. It checks persisted UTC timestamp rounding and uses PostgreSQL xmin to prove that in-order events do not rewrite earlier history. The original implementation fails the latter negative control. Database tests are required; compile-only checks do not establish correctness.
 
-Both ViewRenderingBoundaryTest classes inspect registered MVC application handlers and prohibit XSLT resolvers/views and explicit view return types. Unsafe view and SSE fixtures are negative controls. `python scripts/test_image_scan_policy.py` checks fail-closed applicability evaluation. See security/README.md for the exact scope and expiry.
+Both ViewRenderingBoundaryTest classes inspect registered MVC application handlers and prohibit XSLT resolvers/views and explicit view return types. Unsafe view and SSE fixtures are negative controls. `python scripts/test_image_scan_policy.py` checks fail-closed applicability evaluation. See security/README.md for the patched versions and zero-exception gate.
 
 To exercise the unchanged k6 workload, require projection catch-up, and repeat the demo on the same populated broker/database without deleting data:
 
