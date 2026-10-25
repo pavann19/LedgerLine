@@ -129,7 +129,7 @@ def main():
                     '-e', 'K6_PROFILE', '-e', 'K6_SUMMARY_TREND_STATS',
                     '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
                     '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
-                    '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
+                    f'--summary-export=/evidence/{profile}.json'], env=load_env, stdout=log, stderr=log, timeout=360)
         finally:
             stop_sampling.set()
             sampler.join(timeout=5)
