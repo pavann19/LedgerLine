@@ -172,10 +172,12 @@ def main():
         start = time.monotonic()
         command(['docker', 'restart', 'ledgerline-ledger-service'])
         wait_for(lambda: health(8080))
+        rows_before_replay = sql('SELECT count(*) FROM postings')
         replay = transfer(accounts[0], accounts[1], key=key)
         assert replay['transactionId'] == original['transactionId'] and replay['idempotentReplay']
+        assert rows_before_replay == sql('SELECT count(*) FROM postings')
         record('ledger_restart_replay', recovery_seconds=round(time.monotonic() - start, 3),
-               original_transaction_returned=True)
+               original_transaction_returned=True, posting_count_unchanged=True)
         wait_for(settled)
         invariants()
 
