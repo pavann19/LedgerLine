@@ -1,6 +1,6 @@
 package com.ledgerline.ledger.failure;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.ledgerline.ledger.concurrency.BaseIntegrationTest;
 import com.ledgerline.ledger.domain.AccountType;
 import com.ledgerline.ledger.domain.OutboxEvent;

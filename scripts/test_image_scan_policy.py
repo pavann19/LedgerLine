@@ -23,6 +23,11 @@ class ScanPolicyTest(unittest.TestCase):
     def test_missing_test_receipts_fail_closed(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:self.assertFalse(gate.boundaries_passed(folder))
+    def test_retired_policy_never_waives_a_finding(self):
+        self.policy = {"retiredOn":"2026-10-25", "decisions":[]}
+        self.assertEqual("action_required",self.evaluate())
+        self.assertEqual("action_required",self.evaluate(dict(self.v,VulnerabilityID="CVE-other")))
+        self.assertEqual([],gate.evaluate({"Results":[]},self.policy,False,dt.date(2026,12,1)))
     def test_failed_or_skipped_receipts_fail_closed(self):
         import tempfile
         with tempfile.TemporaryDirectory() as folder:

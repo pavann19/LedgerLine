@@ -1,6 +1,6 @@
 # LedgerLine
 
-LedgerLine is a Java 21 / Spring Boot 3.5 financial-backend demonstration. It records same-currency account transfers as signed integer minor-unit postings in PostgreSQL, then publishes a transactional outbox to Kafka for asynchronous statements and daily summaries.
+LedgerLine is a Java 21 / Spring Boot 4.0 financial-backend demonstration. It records same-currency account transfers as signed integer minor-unit postings in PostgreSQL, then publishes a transactional outbox to Kafka for asynchronous statements and daily summaries.
 
 It is a portfolio implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
 

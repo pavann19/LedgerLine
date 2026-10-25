@@ -1,7 +1,7 @@
 package com.ledgerline.ledger.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.ObjectMapper;
 import com.ledgerline.ledger.domain.*;
 import com.ledgerline.ledger.dto.PostingDto;
 import com.ledgerline.ledger.dto.TransferEventPayload;
@@ -178,7 +178,7 @@ public class TransferCoreSupport {
                 now,
                 null
             ));
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize outbox event payload", e);
         }
 
