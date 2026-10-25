@@ -100,45 +100,48 @@ def main():
     accounts = [api('accounts', {'currency': 'USD', 'type': 'CUSTOMER'})['id'] for _ in range(2)]
     for account in accounts:
         transfer(funding, account, 1000000)
-    load_env = {**os.environ, 'ACCESS_TOKEN': auth, 'ACCOUNT_A': accounts[0], 'ACCOUNT_B': accounts[1],
-                'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': 'performance',
-                'K6_SUMMARY_TREND_STATS': 'avg,min,med,max,p(90),p(95),p(99)'}
-    stop_sampling = threading.Event()
+    load_exit_codes = []
+    for profile in ('correctness', 'performance'):
+        load_env = {**os.environ, 'ACCESS_TOKEN': auth, 'ACCOUNT_A': accounts[0], 'ACCOUNT_B': accounts[1],
+                    'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': profile,
+                    'K6_SUMMARY_TREND_STATS': 'avg,min,med,max,p(90),p(95),p(99)'}
+        stop_sampling = threading.Event()
 
-    def sample_resources():
-        with (destination / 'resource-samples.jsonl').open('w') as samples:
-            while not stop_sampling.is_set():
-                try:
-                    stats = command(['docker', 'stats', '--no-stream', '--format', '{{json .}}'])
-                    samples.write(json.dumps({'utc_epoch': time.time(), 'host_load': os.getloadavg(),
-                                              'docker_stats': stats}) + '\n')
-                    samples.flush()
-                except Exception as error:
-                    samples.write(json.dumps({'observer_error': str(error)}) + '\n')
-                stop_sampling.wait(5)
+        def sample_resources():
+            with (destination / f'resource-samples-{profile}.jsonl').open('w') as samples:
+                while not stop_sampling.is_set():
+                    try:
+                        stats = command(['docker', 'stats', '--no-stream', '--format', '{{json .}}'])
+                        samples.write(json.dumps({'utc_epoch': time.time(), 'host_load': os.getloadavg(),
+                                                  'docker_stats': stats}) + '\n')
+                        samples.flush()
+                    except Exception as error:
+                        samples.write(json.dumps({'observer_error': str(error)}) + '\n')
+                    stop_sampling.wait(5)
 
-    sampler = threading.Thread(target=sample_resources, daemon=True)
-    sampler.start()
-    try:
-        with (destination / 'performance.log').open('w') as log:
-            result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
-                '--user', f'{os.getuid()}:{os.getgid()}',
-                '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
-                '-e', 'K6_PROFILE', '-e', 'K6_SUMMARY_TREND_STATS',
-                '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
-                '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
-                '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
-    finally:
-        stop_sampling.set()
-        sampler.join(timeout=5)
-    metrics = json.loads((destination / 'performance.json').read_text())['metrics']
-    record('performance', threshold_exit_code=result.returncode,
-           transfers=metrics.get('cloud_transfers_success'), failed_requests=metrics.get('http_req_failed'),
-           latency=metrics.get('http_req_duration'), requests=metrics.get('http_reqs'),
-           generator='same VM, separate 0.5 CPU container',
-           generator_image=command(['docker', 'image', 'inspect', 'grafana/k6:latest', '--format', '{{.Id}}']))
-    wait_for(settled)
-    invariants()
+        sampler = threading.Thread(target=sample_resources, daemon=True)
+        sampler.start()
+        try:
+            with (destination / f'{profile}.log').open('w') as log:
+                result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
+                    '--user', f'{os.getuid()}:{os.getgid()}',
+                    '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
+                    '-e', 'K6_PROFILE', '-e', 'K6_SUMMARY_TREND_STATS',
+                    '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
+                    '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
+                    '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
+        finally:
+            stop_sampling.set()
+            sampler.join(timeout=5)
+        metrics = json.loads((destination / f'{profile}.json').read_text())['metrics']
+        record(profile, threshold_exit_code=result.returncode,
+               transfers=metrics.get('cloud_transfers_success'), failed_requests=metrics.get('http_req_failed'),
+               latency=metrics.get('http_req_duration'), requests=metrics.get('http_reqs'),
+               generator='same VM, separate 0.5 CPU container',
+               generator_image=command(['docker', 'image', 'inspect', 'grafana/k6:latest', '--format', '{{.Id}}']))
+        load_exit_codes.append(result.returncode)
+        wait_for(settled)
+        invariants()
 
     try:
         command(['docker', 'stop', 'ledgerline-projection-service'])
@@ -252,7 +255,7 @@ def main():
     wait_for(lambda: health(8080) and health(8081) and settled())
     final = invariants()
     (destination / 'final-invariants.txt').write_text(final)
-    report['result'] = 'PASS' if result.returncode == 0 else 'RECOVERY_PASS_PERFORMANCE_THRESHOLD_FAILED'
+    report['result'] = 'PASS' if all(code == 0 for code in load_exit_codes) else 'RECOVERY_PASS_LOAD_THRESHOLD_FAILED'
     (destination / 'report.json').write_text(json.dumps(report, indent=2))
     print(json.dumps({'result': report['result']}), flush=True)
 
