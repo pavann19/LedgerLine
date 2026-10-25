@@ -6,7 +6,7 @@ LedgerLine demonstrates transactional backend correctness and reliable asynchron
 
 1. Read the [architecture diagram](ARCHITECTURE.md) and trace the atomic ledger transaction through the outbox to the eventual statement.
 2. Open the [financial invariants](FINANCIAL_INVARIANTS.md): integer money, balanced postings, ownership and principal-scoped idempotency are executable contracts.
-3. Inspect `FinancialEdgeRegressionTest`, `TransferStrategyRegressionTest` and `ProjectionDeduplicationTest`. The projection tests compare against full-history SQL and verify late events, duplicate delivery and overflow rollback.
+3. Inspect [financial edge regressions](../ledger-service/src/test/java/com/ledgerline/ledger/concurrency/FinancialEdgeRegressionTest.java), [transfer strategy regressions](../ledger-service/src/test/java/com/ledgerline/ledger/domain/TransferStrategyRegressionTest.java) and [projection regressions](../projection-service/src/test/java/com/ledgerline/projection/ProjectionDeduplicationTest.java). The projection tests compare against full-history SQL and verify late events, duplicate delivery and overflow rollback.
 4. Inspect the [published test and image evidence](EVIDENCE.md#published-ci-evidence). Distinguish remote CI from local load checks.
 5. Read the [security boundaries](SECURITY.md) and [exact vulnerability decisions](../security/README.md), including their expiry.
 
