@@ -184,11 +184,16 @@ def main():
                 '/opt/kafka/bin/kafka-consumer-groups.sh', '--bootstrap-server', 'kafka:9092',
                 '--describe', '--group', 'ledgerline-projection'])
             rows = [line.split() for line in description.splitlines()
-                    if line.startswith('ledgerline-projection ') and 'ledger.transfers.v1' in line]
+                    if line.lstrip().startswith('ledgerline-projection ') and 'ledger.transfers.v1' in line]
             assert len(rows) == 3, 'Expected all three topic partitions in consumer receipt'
-            if any(row[3] != row[4] for row in rows):
+            # A never-used partition has no committed offset ('-') and log end
+            # zero; it has no pending records. Nonempty uncommitted partitions
+            # must still block the caught-up observation.
+            offsets = [0 if row[3] == '-' and row[4] == '0' else
+                       int(row[3]) if row[3] != '-' else -1 for row in rows]
+            if any(offset != int(row[4]) for offset, row in zip(offsets, rows)):
                 return -1
-            return sum(int(row[3]) for row in rows)
+            return sum(offsets)
 
         # Observe offset advancement as well as unchanged projection rows; a
         # delay alone would not demonstrate that the duplicate was consumed.
