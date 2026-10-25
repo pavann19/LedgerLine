@@ -11,6 +11,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import threading
 import time
 import urllib.request
 import urllib.parse
@@ -101,12 +102,32 @@ def main():
         transfer(funding, account, 1000000)
     load_env = {**os.environ, 'ACCESS_TOKEN': auth, 'ACCOUNT_A': accounts[0], 'ACCOUNT_B': accounts[1],
                 'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': 'performance'}
-    with (destination / 'performance.log').open('w') as log:
-        result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
-            '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
-            '-e', 'K6_PROFILE', '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
-            '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
-            '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
+    stop_sampling = threading.Event()
+
+    def sample_resources():
+        with (destination / 'resource-samples.jsonl').open('w') as samples:
+            while not stop_sampling.is_set():
+                try:
+                    stats = command(['docker', 'stats', '--no-stream', '--format', '{{json .}}'])
+                    samples.write(json.dumps({'utc_epoch': time.time(), 'host_load': os.getloadavg(),
+                                              'docker_stats': stats}) + '\n')
+                    samples.flush()
+                except Exception as error:
+                    samples.write(json.dumps({'observer_error': str(error)}) + '\n')
+                stop_sampling.wait(5)
+
+    sampler = threading.Thread(target=sample_resources, daemon=True)
+    sampler.start()
+    try:
+        with (destination / 'performance.log').open('w') as log:
+            result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
+                '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
+                '-e', 'K6_PROFILE', '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
+                '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
+                '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
+    finally:
+        stop_sampling.set()
+        sampler.join(timeout=5)
     metrics = json.loads((destination / 'performance.json').read_text())['metrics']
     record('performance', threshold_exit_code=result.returncode,
            transfers=metrics.get('cloud_transfers_success'), failed_requests=metrics.get('http_req_failed'),
