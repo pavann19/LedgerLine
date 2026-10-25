@@ -101,7 +101,8 @@ def main():
     for account in accounts:
         transfer(funding, account, 1000000)
     load_env = {**os.environ, 'ACCESS_TOKEN': auth, 'ACCOUNT_A': accounts[0], 'ACCOUNT_B': accounts[1],
-                'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': 'performance'}
+                'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': 'performance',
+                'K6_SUMMARY_TREND_STATS': 'avg,min,med,max,p(90),p(95),p(99)'}
     stop_sampling = threading.Event()
 
     def sample_resources():
@@ -123,7 +124,8 @@ def main():
             result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
                 '--user', f'{os.getuid()}:{os.getgid()}',
                 '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
-                '-e', 'K6_PROFILE', '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
+                '-e', 'K6_PROFILE', '-e', 'K6_SUMMARY_TREND_STATS',
+                '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
                 '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
                 '--summary-export=/evidence/performance.json'], env=load_env, stdout=log, stderr=log, timeout=360)
     finally:
