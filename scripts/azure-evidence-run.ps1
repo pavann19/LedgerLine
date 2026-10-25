@@ -1,6 +1,14 @@
 param(
     [string]$Location = "centralindia",
     [string]$VmSize = "Standard_D2ls_v6",
+    [string]$PostgresSku = "Standard_B1ms",
+    [ValidateSet("Burstable", "GeneralPurpose")]
+    [string]$PostgresTier = "Burstable",
+    [string]$LedgerMemory = "900m",
+    [decimal]$LedgerCpu = 0.80,
+    [string]$ProjectionMemory = "700m",
+    [decimal]$ProjectionCpu = 0.45,
+    [switch]$RecoveryChecks,
     [decimal]$BudgetAmount = 25,
     [ValidateSet("correctness", "performance")]
     [string]$K6Profile = "correctness",
@@ -77,6 +85,11 @@ $summary = [ordered]@{
     budgetAmountBillingCurrency = $BudgetAmount
     vmSize = $VmSize
     k6Profile = $K6Profile
+    postgresSku = $PostgresSku
+    postgresTier = $PostgresTier
+    ledgerCpu = $LedgerCpu
+    projectionCpu = $ProjectionCpu
+    recoveryChecks = [bool]$RecoveryChecks
 }
 
 function Save-Summary {
@@ -187,8 +200,8 @@ deletes that group in finally, then polls 'az group exists' until it returns fal
         --location $Location `
         --admin-user ledgeradmin `
         --admin-password $dbPassword `
-        --sku-name Standard_B1ms `
-        --tier Burstable `
+        --sku-name $PostgresSku `
+        --tier $PostgresTier `
         --storage-size 32 `
         --version 16 `
         --public-access $reviewerIp `
@@ -216,9 +229,9 @@ runcmd:
   - echo '$acrPass' | docker login $acrLoginServer -u $acrUser --password-stdin
   - docker run -d --name ledgerline-kafka --restart unless-stopped --network ledgerline --network-alias kafka --memory=900m --cpus=0.75 -e KAFKA_HEAP_OPTS='-Xms256m -Xmx256m' -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e KAFKA_NUM_PARTITIONS=3 apache/kafka:3.8.0
   - sleep 60
-  - docker run -d --name ledgerline-ledger-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8080:8080 --memory=900m --cpus=0.80 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=12 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=4 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_PRODUCER_PROPERTIES_LINGER_MS=5 -e SPRING_KAFKA_PRODUCER_PROPERTIES_BATCH_SIZE=32768 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 -e LEDGER_OUTBOX_RELAY_BATCH_SIZE=100 $acrLoginServer/ledger-service:$tag
+  - docker run -d --name ledgerline-ledger-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8080:8080 --memory=$LedgerMemory --cpus=$LedgerCpu -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=12 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=4 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_PRODUCER_PROPERTIES_LINGER_MS=5 -e SPRING_KAFKA_PRODUCER_PROPERTIES_BATCH_SIZE=32768 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 -e LEDGER_OUTBOX_RELAY_BATCH_SIZE=100 $acrLoginServer/ledger-service:$tag
   - timeout 600 bash -c "until curl -fsS http://127.0.0.1:8080/actuator/health | grep -q UP; do sleep 5; done"
-  - docker run -d --name ledgerline-projection-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8081:8081 --memory=700m --cpus=0.45 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=35 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=6 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_CONSUMER_PROPERTIES_MAX_POLL_RECORDS=100 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
+  - docker run -d --name ledgerline-projection-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8081:8081 --memory=$ProjectionMemory --cpus=$ProjectionCpu -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=35 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=6 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_CONSUMER_PROPERTIES_MAX_POLL_RECORDS=100 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
 "@
     $cloudInitPath = Join-Path ([IO.Path]::GetTempPath()) "ledgerline-cloud-init-$stamp.yaml"
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
@@ -356,6 +369,11 @@ SELECT 'CLOUD_SQL_ASSERTIONS_PASSED' AS verification;
         throw 'Remote SQL command reported an invariant failure'
     }
     if (($remoteResult.value.message -join "`n") -notmatch 'CLOUD_SQL_ASSERTIONS_PASSED') { throw 'Remote SQL assertion completion was not observed' }
+
+    if ($RecoveryChecks) {
+        Save-Summary "running-recovery-checks"
+        & (Join-Path $PSScriptRoot 'verify-cloud-recovery.ps1') -PublicIp $ip -EvidenceDirectory $results
+    }
 
     Save-Summary "recording-cost"
     try {
