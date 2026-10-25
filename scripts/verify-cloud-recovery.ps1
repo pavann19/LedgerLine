@@ -13,12 +13,19 @@ $options = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-
 if ($LASTEXITCODE -ne 0) { throw 'Workload upload failed' }
 & scp.exe @options (Join-Path $PSScriptRoot 'verify-cloud-recovery.py') "${target}:/tmp/verify-cloud-recovery.py"
 if ($LASTEXITCODE -ne 0) { throw 'Recovery probe upload failed' }
-& ssh.exe @options $target 'sudo python3 /tmp/verify-cloud-recovery.py' *> (Join-Path $EvidenceDirectory '04-recovery.log')
+# Native stderr is non-terminating here so failed probes still download their
+# reports before the outer evidence runner destroys the disposable resources.
+$previousPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+& ssh.exe @options $target 'sudo python3 /tmp/verify-cloud-recovery.py > /tmp/verify-cloud-recovery.log 2>&1'
 $probeExit = $LASTEXITCODE
 & ssh.exe @options $target 'sudo chmod -R a+rX /var/tmp/ledgerline-acceptance; docker stats --no-stream; docker ps --format "{{.Names}} {{.Status}}"' *> (Join-Path $EvidenceDirectory '04-host-state.log')
+& scp.exe @options "${target}:/tmp/verify-cloud-recovery.log" (Join-Path $EvidenceDirectory '04-recovery.log') *> (Join-Path $EvidenceDirectory '04-log-download.log')
 & scp.exe @options -r "${target}:/var/tmp/ledgerline-acceptance" $EvidenceDirectory *> (Join-Path $EvidenceDirectory '04-receipt-download.log')
 if ($LASTEXITCODE -ne 0) { throw 'Recovery receipts download failed' }
 if ($probeExit -ne 0) { throw "Recovery probe failed; retained exit $probeExit" }
 $report = Get-Content (Join-Path $EvidenceDirectory 'ledgerline-acceptance/report.json') -Raw | ConvertFrom-Json
 if ($report.result -ne 'PASS') { throw "Additional acceptance result: $($report.result)" }
 $global:LASTEXITCODE = 0
+} finally { $ErrorActionPreference = $previousPreference }
