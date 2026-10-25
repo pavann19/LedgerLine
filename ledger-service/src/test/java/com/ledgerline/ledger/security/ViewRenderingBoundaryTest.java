@@ -4,8 +4,8 @@ import com.ledgerline.ledger.api.*;
 import com.ledgerline.ledger.service.*;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
-import org.springframework.boot.test.mock.mockito.MockBean;
+import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.context.ApplicationContext;
 import org.springframework.core.annotation.AnnotatedElementUtils;
 import org.springframework.web.bind.annotation.ResponseBody;
@@ -18,9 +18,9 @@ import static org.junit.jupiter.api.Assertions.*;
 class ViewRenderingBoundaryTest {
     @Autowired ApplicationContext context;
     @Autowired RequestMappingHandlerMapping mappings;
-    @MockBean AccountService accountService;
-    @MockBean TransferService transferService;
-    @MockBean com.ledgerline.ledger.security.CurrentPrincipal currentPrincipal;
+    @MockitoBean AccountService accountService;
+    @MockitoBean TransferService transferService;
+    @MockitoBean com.ledgerline.ledger.security.CurrentPrincipal currentPrincipal;
 
     private static void requireResponseBody(Class<?> type, java.lang.reflect.Method method) {
         String returnType = method.getGenericReturnType().getTypeName();

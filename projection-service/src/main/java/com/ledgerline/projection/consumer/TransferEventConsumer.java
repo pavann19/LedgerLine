@@ -1,6 +1,6 @@
 package com.ledgerline.projection.consumer;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import tools.jackson.databind.ObjectMapper;
 import com.ledgerline.projection.model.TransferEventPayload;
 import com.ledgerline.projection.service.ProjectionService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;

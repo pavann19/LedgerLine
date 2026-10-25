@@ -22,9 +22,11 @@ def boundaries_passed(directory):
     return passed == REQUIRED
 
 def evaluate(report, policy, tests_passed, today):
-    reviewed = dt.date.fromisoformat(policy["reviewedOn"])
-    expiry = dt.date.fromisoformat(policy["expiresOn"])
-    valid = reviewed <= today < expiry and 0 < (expiry-reviewed).days <= 31 and tests_passed
+    valid = False
+    if policy["decisions"]:
+        reviewed = dt.date.fromisoformat(policy["reviewedOn"])
+        expiry = dt.date.fromisoformat(policy["expiresOn"])
+        valid = reviewed <= today < expiry and 0 < (expiry-reviewed).days <= 31 and tests_passed
     findings = []
     for result in report.get("Results", []):
         for vuln in result.get("Vulnerabilities", []):
