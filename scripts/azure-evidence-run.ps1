@@ -9,6 +9,7 @@ param(
     [string]$ProjectionMemory = "700m",
     [decimal]$ProjectionCpu = 0.45,
     [switch]$RecoveryChecks,
+    [switch]$RemoteOnly,
     [decimal]$BudgetAmount = 25,
     [ValidateSet("correctness", "performance")]
     [string]$K6Profile = "correctness",
@@ -16,6 +17,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($RemoteOnly -and !$RecoveryChecks) { throw 'RemoteOnly requires RecoveryChecks to execute both on-host load profiles' }
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $stamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -90,6 +92,7 @@ $summary = [ordered]@{
     ledgerCpu = $LedgerCpu
     projectionCpu = $ProjectionCpu
     recoveryChecks = [bool]$RecoveryChecks
+    remoteOnly = [bool]$RemoteOnly
 }
 
 function Save-Summary {
@@ -260,57 +263,68 @@ runcmd:
     az postgres flexible-server firewall-rule create --resource-group $rg --server-name $pg --name DemoVmOnly --start-ip-address $ip --end-ip-address $ip --output none
     Assert-LastExitCode "VM PostgreSQL firewall rule failed"
     $sshArgs = @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ServerAliveInterval=15', '-L', '127.0.0.1:8080:127.0.0.1:8080', '-L', '127.0.0.1:8081:127.0.0.1:8081', "azureuser@$ip")
-    $sshTunnel = Start-Process ssh.exe -ArgumentList $sshArgs -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $results 'ssh-tunnel.log')
+    if (!$RemoteOnly) { $sshTunnel = Start-Process ssh.exe -ArgumentList $sshArgs -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $results 'ssh-tunnel.log') }
     $summary.publicIp = $ip
     Save-Summary "waiting-for-health"
 
-    try {
-        Wait-HttpHealth -Name "Ledger service" -Uri "http://localhost:8080/actuator/health" -OutputName "03-azure-ledger-health.json"
-        Wait-HttpHealth -Name "Projection service" -Uri "http://localhost:8081/actuator/health" -OutputName "03-azure-projection-health.json"
-        Get-Content (Join-Path $results "03-azure-ledger-health.json") -Raw | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
-    } catch {
-        az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts "docker ps -a; docker logs --tail 200 ledgerline-ledger-service; docker logs --tail 100 ledgerline-kafka" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health-failure-logs.json")
-        throw
+    if (!$RemoteOnly) {
+        try {
+            Wait-HttpHealth -Name "Ledger service" -Uri "http://localhost:8080/actuator/health" -OutputName "03-azure-ledger-health.json"
+            Wait-HttpHealth -Name "Projection service" -Uri "http://localhost:8081/actuator/health" -OutputName "03-azure-projection-health.json"
+            Get-Content (Join-Path $results "03-azure-ledger-health.json") -Raw | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
+        } catch {
+            az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts "docker ps -a; docker logs --tail 200 ledgerline-ledger-service; docker logs --tail 100 ledgerline-kafka" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health-failure-logs.json")
+            throw
+        }
+
+        Save-Summary "running-smoke"
+        $env:ACCESS_TOKEN = $accessToken
+        & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-smoke.log")
+        if ($LASTEXITCODE -ne 0) { throw "Smoke test failed" }
+
+        $smokeText = Get-Content (Join-Path $results "03-azure-smoke.log") -Raw
+        $accountA = [regex]::Match($smokeText, "Created Account A: ([0-9a-fA-F-]+)").Groups[1].Value
+        $accountB = [regex]::Match($smokeText, "Created Account B: ([0-9a-fA-F-]+)").Groups[1].Value
+        if (-not $accountA -or -not $accountB) { throw "Could not parse account IDs from smoke log" }
+
+        $headers = @{ Authorization = "Bearer $accessToken"; 'Idempotency-Key' = "cloud-replay-$stamp" }
+        $body = @{ fromAccountId=$accountA; toAccountId=$accountB; amountMinor=1; currency='USD' } | ConvertTo-Json
+        $original = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
+        $replay = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
+        if ($original.transactionId -ne $replay.transactionId -or !$replay.idempotentReplay) { throw 'Cloud replay did not return original transaction' }
+        @{ replayReturnedOriginal=$true; transactionId=$original.transactionId } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-replay.json')
+
+        Save-Summary "running-k6"
+        $benchPath = (Join-Path $repo "bench").Replace("\", "/")
+        $evidenceMount = $results.Replace("\", "/")
+        $oldPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker run --rm `
+            -e ACCESS_TOKEN="$accessToken" `
+            -e ACCOUNT_A="$accountA" `
+            -e ACCOUNT_B="$accountB" `
+            -e CLOUD_URL="http://host.docker.internal:8080/api/v1" `
+            -e K6_PROFILE="$K6Profile" `
+            -v "${benchPath}:/bench:ro" `
+            -v "${evidenceMount}:/evidence" `
+            grafana/k6 run /bench/k6-cloud-load.js --summary-export=/evidence/03-azure-k6-summary.json 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-k6.log")
+        $summary.k6ExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $oldPreference
+        if ($summary.k6ExitCode -ne 0) { throw "Cloud k6 correctness thresholds failed" }
+        # Exercise account creation and replay again on the same populated broker/database.
+        & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-reused-smoke.log")
+        Assert-LastExitCode 'Cloud reused-stack smoke failed'
+        Save-Summary "querying-invariants"
+
+    } else {
+        Save-Summary "waiting-for-remote-health"
+        $healthProbe = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'verify-cloud-health.py')))
+        $healthCommand = "set -e; printf '%s' '$healthProbe' | base64 -d > /tmp/verify-cloud-health.py; sudo python3 /tmp/verify-cloud-health.py"
+        az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts $healthCommand --output json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-remote-health.json')
+        Assert-LastExitCode 'On-host cloud health invocation failed'
+        $healthResult = Get-Content (Join-Path $results '03-azure-remote-health.json') -Raw | ConvertFrom-Json
+        if (($healthResult.value.message -join "`n") -notmatch '"result": "PASS"') { throw 'On-host cloud health checks did not pass' }
     }
-
-    Save-Summary "running-smoke"
-    $env:ACCESS_TOKEN = $accessToken
-    & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-smoke.log")
-    if ($LASTEXITCODE -ne 0) { throw "Smoke test failed" }
-
-    $smokeText = Get-Content (Join-Path $results "03-azure-smoke.log") -Raw
-    $accountA = [regex]::Match($smokeText, "Created Account A: ([0-9a-fA-F-]+)").Groups[1].Value
-    $accountB = [regex]::Match($smokeText, "Created Account B: ([0-9a-fA-F-]+)").Groups[1].Value
-    if (-not $accountA -or -not $accountB) { throw "Could not parse account IDs from smoke log" }
-
-    $headers = @{ Authorization = "Bearer $accessToken"; 'Idempotency-Key' = "cloud-replay-$stamp" }
-    $body = @{ fromAccountId=$accountA; toAccountId=$accountB; amountMinor=1; currency='USD' } | ConvertTo-Json
-    $original = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
-    $replay = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
-    if ($original.transactionId -ne $replay.transactionId -or !$replay.idempotentReplay) { throw 'Cloud replay did not return original transaction' }
-    @{ replayReturnedOriginal=$true; transactionId=$original.transactionId } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-replay.json')
-
-    Save-Summary "running-k6"
-    $benchPath = (Join-Path $repo "bench").Replace("\", "/")
-    $evidenceMount = $results.Replace("\", "/")
-    $oldPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    docker run --rm `
-        -e ACCESS_TOKEN="$accessToken" `
-        -e ACCOUNT_A="$accountA" `
-        -e ACCOUNT_B="$accountB" `
-        -e CLOUD_URL="http://host.docker.internal:8080/api/v1" `
-        -e K6_PROFILE="$K6Profile" `
-        -v "${benchPath}:/bench:ro" `
-        -v "${evidenceMount}:/evidence" `
-        grafana/k6 run /bench/k6-cloud-load.js --summary-export=/evidence/03-azure-k6-summary.json 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-k6.log")
-    $summary.k6ExitCode = $LASTEXITCODE
-    $ErrorActionPreference = $oldPreference
-    if ($summary.k6ExitCode -ne 0) { throw "Cloud k6 correctness thresholds failed" }
-    # Exercise account creation and replay again on the same populated broker/database.
-    & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-reused-smoke.log")
-    Assert-LastExitCode 'Cloud reused-stack smoke failed'
-    Save-Summary "querying-invariants"
 
     $probe = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'verify-cloud-api.py')))
     $probeCommand = "set -e; printf '%s' '$probe' | base64 -d > /tmp/verify-cloud-api.py; sudo python3 /tmp/verify-cloud-api.py"
