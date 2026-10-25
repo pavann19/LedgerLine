@@ -36,7 +36,7 @@ Integration, concurrency, property, and Kafka failure tests require real Docker 
 
 ## Documentation
 
-The temporary Azure verification on 2026-10-24 passed 5,235 transfers with zero HTTP failures, live API probes, and financial/projection SQL assertions. Its resources were deleted after verification. See [cloud evidence and limits](docs/EVIDENCE.md#temporary-azure-verification); a continuously hosted demo is not provided.
+The temporary Boot 4 Azure validation on 2026-10-25 passed 51,744 load transfers with zero HTTP failures across the existing 20/100-VU profiles. The 100-VU profile measured 213 transfers/s and 546 ms p95; recovery, duplicate-event and 103,578-posting backup/restore checks passed. Resources were deleted. See [measured cloud results and limits](docs/AZURE_BOOT4_VALIDATION.md); a continuously hosted demo is not provided.
 
 - [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
