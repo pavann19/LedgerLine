@@ -10,7 +10,7 @@ Compose uses known local PostgreSQL/Grafana credentials and binds published port
 
 Docker tags and apk upgrade inputs are mutable; containers run as root. Production requires TLS, least-privilege runtime DB roles separate from migrations, authenticated Kafka, backups/recovery, resource limits, and immutable digests. These are unsupported operations, not shipped guarantees.
 
-AWS Terraform/workflow are optional short-lived evidence examples. REVIEWER_CIDR is required alongside DB/JWT secrets. They expose HTTP, use privileged database credentials, and destroy resources with skip_final_snapshot/force_delete. Protect bearer tokens through a tunnel; no cloud resources were created by this audit. No production recovery evidence exists.
+AWS Terraform/workflow are optional short-lived evidence examples. REVIEWER_CIDR is required alongside DB/JWT secrets. They expose HTTP, use privileged database credentials, and destroy resources with skip_final_snapshot/force_delete. Protect bearer tokens through a tunnel. The AWS template remains unexecuted in this release. No production recovery evidence exists.
 
 Projection V2 adds the composite (account_id,created_at,id) index used for predecessor lookup and late-event repairs. Compose waits for ledger health before starting projection, preventing the two Flyway histories from racing to initialize an empty shared schema. Kafka readiness still requires a successful broker query; its JVM-based health command has a 15-second timeout and a bounded cold-start allowance. These local startup paths were executed in the evaluator; AWS template changes remain unexecuted.
 
