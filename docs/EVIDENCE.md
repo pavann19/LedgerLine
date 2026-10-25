@@ -20,7 +20,7 @@ Local validation on 2026-10-24 passed 53 Java tests under Java 21 Linux, four sc
 
 [GitHub Actions run 40068424035](https://github.com/pavann19/LedgerLine/actions/runs/40068424035) passed on commit `578c552df12bd8200c9d1e8536eb0f9c0a36de28` on 2026-10-24: 43 ledger tests, 10 projection tests, four policy tests, both image builds, SBOM generation and both contextual vulnerability gates. Test failures, errors and skips were zero. The run retains test/coverage and supply-chain artifacts subject to GitHub retention. The load and live API checks above were local; this CI run does not execute them. Later revisions require their own successful run.
 
-Both exact images were scanned. LZ4 uses patched 1.11.4. Raw reports retain CVE-2026-47884 and CVE-2026-47890 in Spring MVC 6.2.19; these are assessed not_affected for the tested REST-only application configuration, not patched or absent. See [the exact applicability policy](../security/README.md). Decisions expire on 2026-11-23; other findings, missing/failed MVC tests, or expired decisions fail the gate. A zero-findings scan is not claimed.
+For the historical Spring Boot 3 release, both exact images were scanned. LZ4 uses patched 1.11.4. Raw reports retain CVE-2026-47884 and CVE-2026-47890 in Spring MVC 6.2.19; these are assessed not_affected for the tested REST-only application configuration, not patched or absent. See [the exact applicability policy](../security/README.md). Those historical decisions were scheduled to expire on 2026-11-23 and have now been retired by the Spring Boot 4 migration below. The historical scan was not a zero-findings result.
 
 ## Temporary Azure verification
 
@@ -55,3 +55,16 @@ The demo generates a random signing secret unless one is supplied. Rekeying inva
 Compressed isolation inputs/results are HISTORICAL single-machine observations, not current security/capacity evidence. Generated reports, cloud logs, and private presentation notes are excluded from public source. Raw local logs, image IDs, source hashes, and test receipts are retained outside the checkout.
 
 Production operation, real-money use, high availability, exactly-once end-to-end processing, and complete failure injection are UNVERIFIED. Historical SQL-funded/broken-experiment volumes are not clean accounting baselines; preserve them and use a separate fresh environment for clean evaluation. See [testing limitations](TESTING.md).
+
+
+## Spring Boot 4 migration — 2026-10-25
+
+Spring Boot 4.0.9 / Spring Framework 7.0.10 preserves Java 21, financial assertions, SQL migrations and benchmark workloads. Jackson 3 compatibility tests preserve integer money values, record field order and numeric nanosecond event timestamps, including reading legacy Jackson 2 events. Boot-specific MVC, security, Kafka, Flyway and test starters replace the older starter layout. Released dependencies resolve through the project-local Maven Central mirror.
+
+[Migration CI](https://github.com/pavann19/LedgerLine/actions/runs/40176097472) passed 55 Java tests with zero failures, errors or skips, five policy tests, both images and their security gates. Both previous Spring MVC applicability exceptions are retired; the policy contains no active exceptions.
+
+Local Java 21 container validation completed the unchanged 100-second, 20-VU workload: 4,762 successful transfers, zero HTTP failures, 9,527 scoped ledger and projection rows, and zero balance, statement or daily-summary drift. The reused-stack evaluator and all 16 API regressions passed. This is a bounded local correctness run, not a dedicated capacity benchmark. The earlier Azure acceptance remains evidence for the historical Boot 3 revision; Boot 4 has not been deployed to Azure.
+
+Both exact local runtime images also passed Trivy 0.74.0 with zero findings under the configured HIGH/CRITICAL, fixed-vulnerability filter and zero applicability exceptions. This does not claim all-severity or unfixed-vulnerability absence. Both public OpenAPI endpoints returned HTTP 200. Metrics remain denied by the existing security policy.
+
+For existing-data compatibility, a read-only copy of the stopped, previously verified PostgreSQL volume was started separately. Both Boot 4 services reached health UP with outbox relay and Kafka consumption disabled; Flyway validated the existing ledger V4 and projection V2 histories. Counts and content hashes of all nine application tables and both migration-history tables were identical before and after startup. The original database was not modified. This verifies data-preserving startup, not an online rolling upgrade or mixed-version operation.

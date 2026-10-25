@@ -92,7 +92,7 @@ jobs:
           severity: HIGH,CRITICAL
           ignore-unfixed: true
           exit-code: '0'
-      - name: Gate vulnerabilities against tested, expiring applicability decisions
+      - name: Gate actionable image vulnerabilities
         run: >-
           python3 scripts/evaluate-image-scan.py ${{ matrix.service }}-trivy.json
           --test-reports .security-test-evidence

@@ -32,7 +32,7 @@ For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `do
 .\mvnw.cmd clean verify -Pcoverage --batch-mode
 ```
 
-Integration, concurrency, property, and Kafka failure tests require real Docker infrastructure. Unavailable infrastructure is a failed/unverified run, never a pass. CI runs the suite, builds images, emits SBOMs, and gates HIGH/CRITICAL Trivy findings against explicit, tested, expiring applicability decisions while preserving raw scan results. [Verified release checks](https://github.com/pavann19/LedgerLine/actions/runs/40068424035) passed 53 Java tests, four policy tests, and both image gates. See [evidence boundaries](docs/EVIDENCE.md) for the exact tested revision.
+Integration, concurrency, property, and Kafka failure tests require real Docker infrastructure. Unavailable infrastructure is a failed/unverified run, never a pass. CI runs the suite, builds images, emits SBOMs, and blocks actionable HIGH/CRITICAL Trivy findings while preserving raw scan results. Spring Boot 4.0.9 manages patched Spring Framework 7.0.10; no active vulnerability applicability exceptions remain. [Migration checks](https://github.com/pavann19/LedgerLine/actions/runs/40176097472) passed 55 Java tests, five policy tests, and both image gates. See [evidence boundaries](docs/EVIDENCE.md) for runtime results and historical release scope.
 
 ## Documentation
 
