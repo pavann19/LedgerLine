@@ -20,7 +20,7 @@ $ErrorActionPreference = 'Continue'
 try {
 & ssh.exe @options $target 'sudo python3 /tmp/verify-cloud-recovery.py > /tmp/verify-cloud-recovery.log 2>&1'
 $probeExit = $LASTEXITCODE
-& ssh.exe @options $target 'sudo chmod -R a+rX /var/tmp/ledgerline-acceptance; docker stats --no-stream; docker ps --format "{{.Names}} {{.Status}}"' *> (Join-Path $EvidenceDirectory '04-host-state.log')
+& ssh.exe @options $target 'sudo chmod -R a+rX /var/tmp/ledgerline-acceptance; sudo docker stats --no-stream; sudo docker ps --format "{{.Names}} {{.Status}}"' *> (Join-Path $EvidenceDirectory '04-host-state.log')
 & scp.exe @options "${target}:/tmp/verify-cloud-recovery.log" (Join-Path $EvidenceDirectory '04-recovery.log') *> (Join-Path $EvidenceDirectory '04-log-download.log')
 & scp.exe @options -r "${target}:/var/tmp/ledgerline-acceptance" $EvidenceDirectory *> (Join-Path $EvidenceDirectory '04-receipt-download.log')
 if ($LASTEXITCODE -ne 0) { throw 'Recovery receipts download failed' }
