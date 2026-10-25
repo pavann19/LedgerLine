@@ -154,7 +154,7 @@ def main():
         invariants()
 
         def committed_offsets():
-            description = command(['docker', 'exec', 'ledgerline-kafka',
+            description = command(['docker', 'exec', '-e', 'KAFKA_HEAP_OPTS=-Xms64m -Xmx128m', 'ledgerline-kafka',
                 '/opt/kafka/bin/kafka-consumer-groups.sh', '--bootstrap-server', 'kafka:9092',
                 '--describe', '--group', 'ledgerline-projection'])
             rows = [line.split() for line in description.splitlines()
@@ -173,7 +173,7 @@ def main():
         processed_before = sql('SELECT count(*) FROM processed_events')
         payload = sql('SELECT payload::text FROM outbox ORDER BY id DESC LIMIT 1')
         assert payload
-        command(['docker', 'exec', '-i', 'ledgerline-kafka',
+        command(['docker', 'exec', '-i', '-e', 'KAFKA_HEAP_OPTS=-Xms64m -Xmx128m', 'ledgerline-kafka',
                  '/opt/kafka/bin/kafka-console-producer.sh', '--bootstrap-server', 'kafka:9092',
                  '--topic', 'ledger.transfers.v1'], input=payload + '\n')
         wait_for(lambda: committed_offsets() >= offsets_before + 1)
