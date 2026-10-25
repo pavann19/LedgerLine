@@ -121,6 +121,7 @@ def main():
     try:
         with (destination / 'performance.log').open('w') as log:
             result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
+                '--user', f'{os.getuid()}:{os.getgid()}',
                 '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
                 '-e', 'K6_PROFILE', '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
                 '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
