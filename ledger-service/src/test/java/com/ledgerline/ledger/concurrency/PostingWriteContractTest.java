@@ -28,6 +28,21 @@ class PostingWriteContractTest extends BaseIntegrationTest {
     @Autowired PostingRepository postings;
     @Autowired JdbcClient jdbc;
     @Autowired PlatformTransactionManager manager;
+    @Autowired com.ledgerline.ledger.repository.TransferWriteRepository journal;
+
+    @Test
+    void failedAuditRollsBackJournalHeaderAndOutboxTogether() {
+        UUID from = accounts.createAccount(new CreateAccountRequest("USD",AccountType.OVERDRAFT)).id();
+        UUID to = accounts.createAccount(new CreateAccountRequest("USD",AccountType.CUSTOMER)).id();
+        UUID id = UUID.randomUUID();
+        assertThrows(org.springframework.dao.DataAccessException.class, () ->
+            new TransactionTemplate(manager).execute(status -> journal.insert(id,"atomic-"+id,new byte[32],
+                from,to,1,"USD",Instant.now(),"{}","SYSTEM","invalid-json")));
+        assertEquals(0L,jdbc.sql("SELECT count(*) FROM transactions WHERE id=?").param(id).query(Long.class).single());
+        assertTrue(postings.findByTransactionId(id).isEmpty());
+        assertEquals(0L,jdbc.sql("SELECT count(*) FROM outbox WHERE aggregate_id=?").param(id).query(Long.class).single());
+        assertEquals(0L,jdbc.sql("SELECT count(*) FROM audit_log WHERE entity_id=?").param(id.toString()).query(Long.class).single());
+    }
 
     @ParameterizedTest
     @EnumSource(value = IsolationVariant.class, names = {
@@ -56,6 +71,10 @@ class PostingWriteContractTest extends BaseIntegrationTest {
         assertEquals(0, stored.get(0).createdAt().getNano() % 1_000);
         assertEquals(-amount, accounts.getAccount(from).balanceMinor());
         assertEquals(amount, accounts.getAccount(to).balanceMinor());
+        assertEquals(1L,jdbc.sql("SELECT count(*) FROM outbox WHERE aggregate_id=?")
+            .param(initial.transactionId()).query(Long.class).single());
+        assertEquals(1L,jdbc.sql("SELECT count(*) FROM audit_log WHERE entity_id=? AND action='TRANSFER_POSTED'")
+            .param(initial.transactionId().toString()).query(Long.class).single());
     }
 
     @Test

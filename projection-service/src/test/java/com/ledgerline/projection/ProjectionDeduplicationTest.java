@@ -19,6 +19,114 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 
 class ProjectionDeduplicationTest extends BaseProjectionIntegrationTest {
+    @Autowired private com.ledgerline.projection.consumer.TransferEventConsumer consumer;
+    @Autowired private tools.jackson.databind.ObjectMapper mapper;
+
+    @Test
+    void batchAcknowledgesOnlyAfterCommitAndRedeliveryDoesNotDuplicate() throws Exception {
+        var payload=new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),7,"USD",Instant.now());
+        var record=new org.apache.kafka.clients.consumer.ConsumerRecord<String,String>("test",0,1,"key",mapper.writeValueAsString(payload));
+        var acknowledged=new java.util.concurrent.atomic.AtomicBoolean();
+        consumer.setSimulateCrashBeforeOffsetCommit(true);
+        try {
+            assertThrows(RuntimeException.class,()->consumer.onMessages(List.of(record),()->acknowledged.set(true)));
+            assertFalse(acknowledged.get());
+            assertTrue(processedEventsRepository.isProcessed(payload.eventId()));
+        } finally {
+            consumer.setSimulateCrashBeforeOffsetCommit(false);
+        }
+        consumer.onMessages(List.of(record),()->acknowledged.set(true));
+        assertTrue(acknowledged.get());
+        assertEquals(1,projectionService.getStatement(payload.fromAccountId(),10,0).size());
+    }
+
+    @Test
+    void batchDeduplicatesAndMatchesFullHistoryWithLateCrossDayEvents() {
+        UUID from=UUID.randomUUID(),to=UUID.randomUUID();
+        var events=new java.util.ArrayList<TransferEventPayload>();
+        var random=new java.util.Random(194);
+        Instant base=Instant.parse("2026-10-20T23:59:59.999999900Z");
+        for(int i=0;i<80;i++) {
+            boolean reverse=random.nextBoolean();
+            events.add(new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),reverse?to:from,reverse?from:to,
+                1+random.nextInt(100),"USD",base.plusSeconds(random.nextInt(180000))));
+        }
+        events.addAll(java.util.List.copyOf(events.subList(0,10)));
+        assertEquals(80,projectionService.projectBatch(events));
+        assertEquals(0L,jdbc.sql("""
+            SELECT count(*) FROM (SELECT running_balance_minor,sum(amount_minor) OVER(PARTITION BY account_id
+                ORDER BY created_at,id) expected FROM statement_view WHERE account_id IN (?,?)) s
+            WHERE running_balance_minor<>expected
+            """).params(from,to).query(Long.class).single());
+        assertEquals(0L,jdbc.sql("""
+            WITH expected AS (
+                SELECT account_id,(created_at AT TIME ZONE 'UTC')::date summary_date,
+                    (array_agg(running_balance_minor-amount_minor ORDER BY created_at,id))[1] opening,
+                    (array_agg(running_balance_minor ORDER BY created_at DESC,id DESC))[1] closing,
+                    coalesce(sum(amount_minor) FILTER(WHERE amount_minor>0),0) inflow,
+                    coalesce(sum(-amount_minor) FILTER(WHERE amount_minor<0),0) outflow,count(*) postings
+                FROM statement_view WHERE account_id IN (?,?) GROUP BY 1,2
+            ), actual AS(SELECT * FROM daily_account_summary WHERE account_id IN (?,?))
+            SELECT count(*) FROM expected e FULL JOIN actual d USING(account_id,summary_date)
+            WHERE e.account_id IS NULL OR d.account_id IS NULL OR d.opening_balance_minor<>e.opening
+                OR d.closing_balance_minor<>e.closing OR d.total_inflow_minor<>e.inflow
+                OR d.total_outflow_minor<>e.outflow OR d.posting_count<>e.postings
+            """).params(from,to,from,to).query(Long.class).single());
+        String versions=jdbc.sql("SELECT string_agg(id||':'||xmin::text,',' ORDER BY id) FROM statement_view WHERE account_id=?")
+            .param(from).query(String.class).single();
+        assertEquals(0,projectionService.projectBatch(events));
+        assertEquals(versions,jdbc.sql("SELECT string_agg(id||':'||xmin::text,',' ORDER BY id) FROM statement_view WHERE account_id=?")
+            .param(from).query(String.class).single());
+    }
+
+    @Test
+    void batchOverflowRollsBackEarlierEventsAndEveryMarker() {
+        UUID to=UUID.randomUUID(),from=UUID.randomUUID();
+        Instant now=Instant.parse("2026-10-20T10:00:00Z");
+        projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),from,to,Long.MAX_VALUE,"USD",now));
+        var valid=new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),5,"USD",now.plusSeconds(1));
+        var overflow=new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),from,to,1,"USD",now.plusSeconds(2));
+        assertThrows(ArithmeticException.class,()->projectionService.projectBatch(List.of(valid,overflow)));
+        assertFalse(processedEventsRepository.isProcessed(valid.eventId()));
+        assertFalse(processedEventsRepository.isProcessed(overflow.eventId()));
+        assertTrue(projectionService.getStatement(valid.fromAccountId(),10,0).isEmpty());
+        assertEquals(Long.MAX_VALUE,projectionService.getStatement(to,1,0).getFirst().runningBalanceMinor());
+    }
+
+    @Test
+    void mixedAppendAndLateArrivalsMatchBothSidesOfFullHistoryOracle() {
+        UUID from = UUID.randomUUID(), to = UUID.randomUUID();
+        Instant base = Instant.parse("2026-10-20T23:59:59.999999900Z");
+        var random = new java.util.Random(7319);
+        for (int i = 0; i < 80; i++) {
+            boolean reverse = random.nextBoolean();
+            // Mix appends, late events, equal timestamps, and UTC microsecond rounding.
+            Instant time = base.plusSeconds(i % 4 == 0 ? random.nextInt(i + 1) : i)
+                .plusSeconds(i / 25 * 86400L);
+            assertTrue(projectionService.projectTransfer(new TransferEventPayload(UUID.randomUUID(), UUID.randomUUID(),
+                reverse ? to : from, reverse ? from : to, 1 + random.nextInt(100), "USD", time)));
+            assertEquals(0L, jdbc.sql("""
+                WITH rows AS (
+                    SELECT *, sum(amount_minor) OVER (PARTITION BY account_id ORDER BY created_at,id) expected
+                    FROM statement_view WHERE account_id IN (?,?)
+                ) SELECT count(*) FROM rows WHERE running_balance_minor<>expected
+                """).params(from, to).query(Long.class).single());
+            assertEquals(0L, jdbc.sql("""
+                WITH expected AS (
+                    SELECT account_id,(created_at AT TIME ZONE 'UTC')::date summary_date,
+                        (array_agg(running_balance_minor-amount_minor ORDER BY created_at,id))[1] opening,
+                        (array_agg(running_balance_minor ORDER BY created_at DESC,id DESC))[1] closing,
+                        coalesce(sum(amount_minor) FILTER (WHERE amount_minor>0),0) inflow,
+                        coalesce(sum(-amount_minor) FILTER (WHERE amount_minor<0),0) outflow,count(*) postings
+                    FROM statement_view WHERE account_id IN (?,?) GROUP BY 1,2
+                ), actual AS (SELECT * FROM daily_account_summary WHERE account_id IN (?,?))
+                SELECT count(*) FROM expected e FULL JOIN actual d USING(account_id,summary_date)
+                WHERE e.account_id IS NULL OR d.account_id IS NULL OR d.opening_balance_minor<>e.opening
+                    OR d.closing_balance_minor<>e.closing OR d.total_inflow_minor<>e.inflow
+                    OR d.total_outflow_minor<>e.outflow OR d.posting_count<>e.postings
+                """).params(from, to, from, to).query(Long.class).single());
+        }
+    }
 
     @Autowired
     private ProjectionService projectionService;

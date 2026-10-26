@@ -1,6 +1,8 @@
 param(
     [Parameter(Mandatory=$true)][string]$PublicIp,
-    [Parameter(Mandatory=$true)][string]$EvidenceDirectory
+    [Parameter(Mandatory=$true)][string]$EvidenceDirectory,
+    [ValidateRange(1,3)][int]$PerformanceRepeats = 1,
+    [string]$RetainedBackupPath = ""
 )
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
@@ -13,6 +15,16 @@ $options = @('-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=accept-new', '-
 if ($LASTEXITCODE -ne 0) { throw 'Workload upload failed' }
 & scp.exe @options (Join-Path $PSScriptRoot 'verify-cloud-recovery.py') "${target}:/tmp/verify-cloud-recovery.py"
 if ($LASTEXITCODE -ne 0) { throw 'Recovery probe upload failed' }
+$acceptanceOptions = @{performance_repeats=$PerformanceRepeats}
+if ($RetainedBackupPath) {
+    $acceptanceOptions.retained_backup_sha256 = (Get-FileHash -LiteralPath $RetainedBackupPath -Algorithm SHA256).Hash.ToLower()
+    & scp.exe @options $RetainedBackupPath "${target}:/tmp/retained-backup.dump"
+    if ($LASTEXITCODE -ne 0) { throw 'Retained backup upload failed' }
+}
+$optionsPath = Join-Path $EvidenceDirectory 'acceptance-options.json'
+$acceptanceOptions | ConvertTo-Json | Set-Content -Encoding UTF8 $optionsPath
+& scp.exe @options $optionsPath "${target}:/tmp/acceptance-options.json"
+if ($LASTEXITCODE -ne 0) { throw 'Acceptance settings upload failed' }
 # Native stderr is non-terminating here so failed probes still download their
 # reports before the outer evidence runner destroys the disposable resources.
 $previousPreference = $ErrorActionPreference

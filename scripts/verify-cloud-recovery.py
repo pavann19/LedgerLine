@@ -33,6 +33,10 @@ def main():
     report = {'source_image': config['Image'], 'events': []}
     report['workload_sha256'] = hashlib.sha256(Path('/tmp/k6-cloud-load.js').read_bytes()).hexdigest()
     report['probe_sha256'] = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    options_path = Path('/tmp/acceptance-options.json')
+    options = json.loads(options_path.read_text(encoding='utf-8-sig')) if options_path.exists() else {}
+    repeats = options.get('performance_repeats', 1)
+    assert isinstance(repeats, int) and 1 <= repeats <= 3
 
     def record(name, **values):
         item = {'check': name, **values}
@@ -93,6 +97,12 @@ def main():
         assert 'CLOUD_SQL_ASSERTIONS_PASSED' in output
         return output
 
+    # Persistent psql timing excludes connection setup and provides a bounded
+    # client/server roundtrip diagnostic. It is not an application latency metric.
+    timing = command(['psql', '-X', '-At', '-v', 'ON_ERROR_STOP=1', *db_args, '-d', 'ledgerline'],
+                     input='\\timing on\n' + 'SELECT 1;\n' * 30, env=db_env)
+    (destination / 'database-roundtrip-timing.txt').write_text(timing)
+
     # This is a single dedicated host with explicit container CPU allocations,
     # not an independent load-generator topology or a saturation claim.
     command(['docker', 'pull', 'grafana/k6:latest'])
@@ -101,14 +111,16 @@ def main():
     for account in accounts:
         transfer(funding, account, 1000000)
     load_exit_codes = []
-    for profile in ('correctness', 'performance'):
+    cases = [('correctness', 'correctness')] + [
+        ('performance' if i == 0 else f'performance-repeat-{i + 1}', 'performance') for i in range(repeats)]
+    for case, profile in cases:
         load_env = {**os.environ, 'ACCESS_TOKEN': auth, 'ACCOUNT_A': accounts[0], 'ACCOUNT_B': accounts[1],
                     'CLOUD_URL': 'http://127.0.0.1:8080/api/v1', 'K6_PROFILE': profile,
                     'K6_SUMMARY_TREND_STATS': 'avg,min,med,max,p(90),p(95),p(99)'}
         stop_sampling = threading.Event()
 
         def sample_resources():
-            with (destination / f'resource-samples-{profile}.jsonl').open('w') as samples:
+            with (destination / f'resource-samples-{case}.jsonl').open('w') as samples:
                 while not stop_sampling.is_set():
                     try:
                         stats = command(['docker', 'stats', '--no-stream', '--format', '{{json .}}'])
@@ -122,25 +134,41 @@ def main():
         sampler = threading.Thread(target=sample_resources, daemon=True)
         sampler.start()
         try:
-            with (destination / f'{profile}.log').open('w') as log:
+            with (destination / f'{case}.log').open('w') as log:
                 result = subprocess.run(['docker', 'run', '--rm', '--network', 'host', '--cpus=0.5',
                     '--user', f'{os.getuid()}:{os.getgid()}',
                     '-e', 'ACCESS_TOKEN', '-e', 'ACCOUNT_A', '-e', 'ACCOUNT_B', '-e', 'CLOUD_URL',
                     '-e', 'K6_PROFILE', '-e', 'K6_SUMMARY_TREND_STATS',
                     '-v', '/tmp/k6-cloud-load.js:/bench/load.js:ro',
                     '-v', f'{destination}:/evidence', 'grafana/k6:latest', 'run', '/bench/load.js',
-                    f'--summary-export=/evidence/{profile}.json'], env=load_env, stdout=log, stderr=log, timeout=360)
+                    f'--summary-export=/evidence/{case}.json'], env=load_env, stdout=log, stderr=log, timeout=360)
         finally:
             stop_sampling.set()
             sampler.join(timeout=5)
-        metrics = json.loads((destination / f'{profile}.json').read_text())['metrics']
-        record(profile, threshold_exit_code=result.returncode,
+        metrics = json.loads((destination / f'{case}.json').read_text())['metrics']
+        record(case, profile=profile, threshold_exit_code=result.returncode,
                transfers=metrics.get('cloud_transfers_success'), failed_requests=metrics.get('http_req_failed'),
                latency=metrics.get('http_req_duration'), requests=metrics.get('http_reqs'),
                generator='same VM, separate 0.5 CPU container',
                generator_image=command(['docker', 'image', 'inspect', 'grafana/k6:latest', '--format', '{{.Id}}']))
         load_exit_codes.append(result.returncode)
-        wait_for(settled)
+        stats = json.loads(sql("SELECT row_to_json(s) FROM (SELECT numbackends,xact_commit,xact_rollback,"
+            "blks_read,blks_hit,temp_bytes,deadlocks,blk_read_time,blk_write_time "
+            "FROM pg_stat_database WHERE datname=current_database()) s"))
+        record('database_statistics', case=case, values=stats)
+        try:
+            catchup = wait_for(settled)
+            record('load_catchup', case=case, passed=True, observed_seconds=catchup, deadline_seconds=180)
+        except AssertionError:
+            record('load_catchup', case=case, passed=False, deadline_seconds=180,
+                   ledger_rows=int(sql('SELECT count(*) FROM postings')),
+                   projection_rows=int(sql('SELECT count(*) FROM statement_view')),
+                   pending_events=int(sql('SELECT count(*) FROM outbox WHERE published_at IS NULL')))
+            load_exit_codes.append(1)
+            # Keep the original gate failed. Additional settling permits independent
+            # recovery drills; it must never be counted as a passing 180-second gate.
+            observed = wait_for(settled, timeout=600)
+            record('additional_settling', case=case, observed_seconds=observed, original_gate_passed=False)
         invariants()
 
     try:
@@ -249,6 +277,36 @@ def main():
                dump_seconds=dump_seconds, restore_seconds=restore_seconds,
                backup_bytes=(destination / 'backup.dump').stat().st_size,
                matching_table_fingerprints=len(tables), postings=int(sql('SELECT count(*) FROM postings')))
+        (destination / 'backup-fingerprints.json').write_text(json.dumps(
+            {'source': before, 'restored': fingerprints(restore_db)}, indent=2))
+
+        if options.get('retained_backup_sha256'):
+            retained = Path('/tmp/retained-backup.dump')
+            assert hashlib.sha256(retained.read_bytes()).hexdigest() == options['retained_backup_sha256']
+            fixture_db = 'retained_source_' + uuid.uuid4().hex[:8]
+            roundtrip_db = 'retained_roundtrip_' + uuid.uuid4().hex[:8]
+            sql(f'CREATE DATABASE {fixture_db}', 'postgres')
+            fixture_common = ['docker', 'run', '--rm', '--network', 'host', '-e', 'PGPASSWORD',
+                '-e', 'PGSSLMODE', '-v', '/tmp/retained-backup.dump:/retained.dump:ro',
+                '-v', f'{destination}:/evidence', 'postgres:16-alpine']
+            command([*fixture_common, 'pg_restore', *db_args, '-d', fixture_db, '--no-owner',
+                     '--no-privileges', '--exit-on-error', '/retained.dump'], env=db_env)
+            assert int(sql('SELECT count(*) FROM postings', fixture_db)) == 103578
+            retained_before = fingerprints(fixture_db)
+            invariants(fixture_db)
+            command([*common, 'pg_dump', *db_args, '-d', fixture_db, '-Fc',
+                     '-f', '/evidence/retained-roundtrip.dump'], env=db_env)
+            sql(f'CREATE DATABASE {roundtrip_db}', 'postgres')
+            command([*common, 'pg_restore', *db_args, '-d', roundtrip_db, '--no-owner',
+                     '--no-privileges', '--exit-on-error', '/evidence/retained-roundtrip.dump'], env=db_env)
+            retained_after = fingerprints(roundtrip_db)
+            assert retained_before == retained_after
+            invariants(roundtrip_db)
+            (destination / 'retained-fingerprints.json').write_text(json.dumps(
+                {'source': retained_before, 'restored': retained_after}, indent=2))
+            record('retained_backup_restore', postings=103578, matching_table_fingerprints=len(tables),
+                   retained_backup_sha256=options['retained_backup_sha256'],
+                   scope='Original retained backup restored on Azure, then independently dumped/restored; not the deleted historical live source')
     finally:
         command(['docker', 'start', 'ledgerline-kafka', 'ledgerline-ledger-service', 'ledgerline-projection-service'])
 

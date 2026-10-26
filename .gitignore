@@ -24,3 +24,10 @@ bench/results/03-*
 __pycache__/
 *.pyc
 .security-test-evidence/
+
+# Private database backups and raw acceptance receipts
+*.dump
+*.backup
+.private-evidence/
+private-backups/
+**/ledgerline-acceptance/
