@@ -2,7 +2,10 @@ title = "LedgerLine secret scanning"
 [extend]
 useDefault = true
 # AND: only this exact synthetic secret in these exact test classes.
-[[allowlists]]
+[[rules]]
+id = "generic-api-key"
+
+[[rules.allowlists]]
 description = "Known synthetic JWT boundary-test fixture"
 condition = "AND"
 regexTarget = "secret"
