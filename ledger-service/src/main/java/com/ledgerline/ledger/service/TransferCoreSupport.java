@@ -20,7 +20,9 @@ import com.ledgerline.ledger.security.CurrentPrincipal;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -54,25 +56,35 @@ public class TransferCoreSupport {
     }
 
     public void validateLockedTransferRequest(TransferRequest request) {
+        Map<UUID, Account> lockedAccounts = new HashMap<>();
         java.util.stream.Stream.of(request.fromAccountId(), request.toAccountId()).distinct().sorted()
-            .forEach(id -> accountRepository.findByIdForShare(id)
-                .orElseThrow(() -> new AccountNotFoundException(id)));
-        validateTransferRequest(request);
+            .forEach(id -> lockedAccounts.put(id, accountRepository.findByIdForShare(id)
+                .orElseThrow(() -> new AccountNotFoundException(id))));
+        validateTransferShape(request);
+        validateAccounts(request, lockedAccounts.get(request.fromAccountId()),
+            lockedAccounts.get(request.toAccountId()));
     }
 
     public void validateTransferRequest(TransferRequest request) {
+        validateTransferShape(request);
+
+        Account fromAccount = accountRepository.findById(request.fromAccountId())
+            .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
+        Account toAccount = accountRepository.findById(request.toAccountId())
+            .orElseThrow(() -> new AccountNotFoundException(request.toAccountId()));
+        validateAccounts(request, fromAccount, toAccount);
+    }
+
+    private void validateTransferShape(TransferRequest request) {
         if (request.fromAccountId().equals(request.toAccountId())) {
             throw new InvalidTransferException("Source and destination accounts must be distinct");
         }
         if (request.amountMinor() <= 0) {
             throw new InvalidTransferException("Transfer amount must be strictly positive");
         }
+    }
 
-        Account fromAccount = accountRepository.findById(request.fromAccountId())
-            .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
-        Account toAccount = accountRepository.findById(request.toAccountId())
-            .orElseThrow(() -> new AccountNotFoundException(request.toAccountId()));
-
+    private void validateAccounts(TransferRequest request, Account fromAccount, Account toAccount) {
         if (fromAccount.status() != AccountStatus.ACTIVE) {
             throw new InvalidTransferException("Source account is not ACTIVE: " + fromAccount.status());
         }
@@ -154,8 +166,7 @@ public class TransferCoreSupport {
             currency,
             now
         );
-        postingRepository.insertPosting(debitPosting);
-        postingRepository.insertPosting(creditPosting);
+        List<Posting> persistedPostings = postingRepository.insertPairReturning(debitPosting, creditPosting);
 
         // 3. Insert Outbox Event for Async Kafka Relay
         UUID eventId = UUID.randomUUID();
@@ -193,8 +204,7 @@ public class TransferCoreSupport {
                 request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency)
         ));
 
-        // 5. Query created postings with their generated IDs
-        List<Posting> persistedPostings = postingRepository.findByTransactionId(transactionId);
+        // 5. Return the stored IDs and timestamp precision from INSERT ... RETURNING.
         List<PostingDto> postingDtos = persistedPostings.stream()
             .map(p -> new PostingDto(p.id(), p.accountId(), p.amountMinor(), p.currency(), p.createdAt()))
             .toList();
