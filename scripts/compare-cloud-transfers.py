@@ -45,7 +45,7 @@ def main():
     db_env = {**os.environ, 'PGPASSWORD': ledger_env['SPRING_DATASOURCE_PASSWORD'], 'PGSSLMODE': 'require'}
     db_args = ['-h', url.hostname, '-U', ledger_env['SPRING_DATASOURCE_USERNAME']]
     report = {'cases': [], 'order': ['baseline', 'optimized', 'optimized', 'baseline', 'baseline', 'optimized'],
-              'method': 'fresh JVMs; identical cloned dataset; original 150-second performance profile',
+              'method': 'fresh JVMs; identical cloned dataset; remove verified scratch DB after each case; original 150-second performance profile',
               'workload_sha256': hashlib.sha256(Path('/tmp/k6-cloud-load.js').read_bytes()).hexdigest(),
               'probe_sha256': hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
               'allocations': {name: {'memory_bytes': c['HostConfig']['Memory'],
@@ -186,19 +186,33 @@ def main():
             stop.set()
             sampler.join(timeout=5)
         metrics = json.loads((case_dir / 'summary.json').read_text())['metrics']
-        catchup = wait_for(lambda: settled(database))
-        output = command(['psql', '-X', '-v', 'ON_ERROR_STOP=1', *db_args, '-d', database,
-                          '-f', '/tmp/invariants.sql'], env=db_env)
-        (case_dir / 'invariants.txt').write_text(output)
-        assert 'CLOUD_SQL_ASSERTIONS_PASSED' in output
         event = {'case': case, 'variant': variant, 'threshold_exit_code': result.returncode,
                  'initial_fingerprint': initial_fingerprint, 'transfers': metrics.get('cloud_transfers_success'),
                  'requests': metrics['http_reqs'], 'failed_requests': metrics['http_req_failed'],
-                 'latency': metrics['http_req_duration'], 'catchup_seconds': catchup, 'invariants_passed': True}
+                 'latency': metrics['http_req_duration'], 'catchup_seconds': None, 'invariants_passed': None}
         report['cases'].append(event)
+        save()  # Preserve the measured load even if its subsequent validation fails.
+        try:
+            event['catchup_seconds'] = wait_for(lambda: settled(database))
+            check = subprocess.run(['psql', '-X', '-v', 'ON_ERROR_STOP=1', *db_args, '-d', database,
+                                    '-f', '/tmp/invariants.sql'], env=db_env, text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=600)
+            (case_dir / 'invariants.txt').write_text(check.stdout)
+            assert check.returncode == 0 and 'CLOUD_SQL_ASSERTIONS_PASSED' in check.stdout, 'Cloud SQL invariants failed'
+            event['invariants_passed'] = True
+        except Exception as error:
+            event['invariants_passed'] = False
+            event['validation_error'] = str(error)
+            report['result'] = 'VALIDATION_FAILED'
+            save()
+            raise
         save()
         print(json.dumps(event), flush=True)
         command(['docker', 'stop', *names])
+        # Remove only this verified scratch clone. Earlier cases must not leave
+        # background maintenance or dirty database pages competing with later cases.
+        wait_for(lambda: sql("SELECT count(*) FROM pg_stat_activity WHERE datname='" + database + "'") == '0')
+        sql(f'DROP DATABASE {database}')
 
     medians = {}
     for variant in ('baseline', 'optimized'):

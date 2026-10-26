@@ -4,12 +4,15 @@ param(
     [string]$PostgresSku = "Standard_B1ms",
     [ValidateSet("Burstable", "GeneralPurpose")]
     [string]$PostgresTier = "Burstable",
+    [ValidateSet("P4", "P6", "P10", "P15", "P20", "P30", "P40", "P50")]
+    [string]$PostgresPerformanceTier = "P4",
     [string]$LedgerMemory = "900m",
     [decimal]$LedgerCpu = 0.80,
     [string]$ProjectionMemory = "700m",
     [decimal]$ProjectionCpu = 0.45,
     [switch]$RecoveryChecks,
     [switch]$RemoteOnly,
+    [string]$ComparisonBaselineLocalImage = "",
     [decimal]$BudgetAmount = 25,
     [ValidateSet("correctness", "performance")]
     [string]$K6Profile = "correctness",
@@ -17,7 +20,12 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-if ($RemoteOnly -and !$RecoveryChecks) { throw 'RemoteOnly requires RecoveryChecks to execute both on-host load profiles' }
+if ($RemoteOnly -and !$RecoveryChecks) { throw 'RemoteOnly requires RecoveryChecks to execute on-host verification' }
+if ($ComparisonBaselineLocalImage -and (!$RemoteOnly -or !$RecoveryChecks)) { throw 'ComparisonBaselineLocalImage requires RemoteOnly and RecoveryChecks' }
+if ($ComparisonBaselineLocalImage) {
+    & docker image inspect $ComparisonBaselineLocalImage --format '{{.Id}}' > $null
+    if ($LASTEXITCODE -ne 0) { throw 'The comparison baseline image must exist locally before provisioning Azure' }
+}
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $stamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -89,10 +97,12 @@ $summary = [ordered]@{
     k6Profile = $K6Profile
     postgresSku = $PostgresSku
     postgresTier = $PostgresTier
+    postgresPerformanceTier = $PostgresPerformanceTier
     ledgerCpu = $LedgerCpu
     projectionCpu = $ProjectionCpu
     recoveryChecks = [bool]$RecoveryChecks
     remoteOnly = [bool]$RemoteOnly
+    comparisonBaselineLocalImage = $ComparisonBaselineLocalImage
 }
 
 function Save-Summary {
@@ -195,6 +205,11 @@ deletes that group in finally, then polls 'az group exists' until it returns fal
     Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/ledger-service:$tag") -LogName "03-azure-docker-push-ledger.log" -FailureMessage "ledger-service Docker push failed"
     Invoke-DockerLogged -Arguments @("build", "-t", "$acrLoginServer/projection-service:$tag", "-f", "deploy/Dockerfile.projection", $repo) -LogName "03-azure-docker-build-projection.log" -FailureMessage "projection-service Docker build failed"
     Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/projection-service:$tag") -LogName "03-azure-docker-push-projection.log" -FailureMessage "projection-service Docker push failed"
+    if ($ComparisonBaselineLocalImage) {
+        Invoke-DockerLogged -Arguments @("tag", $ComparisonBaselineLocalImage, "$acrLoginServer/ledger-baseline:comparison") -LogName "03-baseline-tag.log" -FailureMessage "Baseline image tag failed"
+        Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/ledger-baseline:comparison") -LogName "03-baseline-push.log" -FailureMessage "Baseline image push failed"
+    }
+
 
     Save-Summary "creating-postgres"
     az postgres flexible-server create `
@@ -206,6 +221,7 @@ deletes that group in finally, then polls 'az group exists' until it returns fal
         --sku-name $PostgresSku `
         --tier $PostgresTier `
         --storage-size 32 `
+        --performance-tier $PostgresPerformanceTier `
         --version 16 `
         --public-access $reviewerIp `
         --yes `
@@ -386,7 +402,11 @@ SELECT 'CLOUD_SQL_ASSERTIONS_PASSED' AS verification;
 
     if ($RecoveryChecks) {
         Save-Summary "running-recovery-checks"
-        & (Join-Path $PSScriptRoot 'verify-cloud-recovery.ps1') -PublicIp $ip -EvidenceDirectory $results
+        if ($ComparisonBaselineLocalImage) {
+            & (Join-Path $PSScriptRoot 'compare-cloud-transfers.ps1') -PublicIp $ip -EvidenceDirectory $results -ResourceGroup $rg -BaselineImage "$acrLoginServer/ledger-baseline:comparison" -OptimizedImage "$acrLoginServer/ledger-service:$tag"
+        } else {
+            & (Join-Path $PSScriptRoot 'verify-cloud-recovery.ps1') -PublicIp $ip -EvidenceDirectory $results
+        }
     }
 
     Save-Summary "recording-cost"
