@@ -38,6 +38,8 @@ Integration, concurrency, property, and Kafka failure tests require real Docker 
 
 The temporary Boot 4 Azure validation on 2026-10-25 passed 51,744 load transfers with zero HTTP failures across the existing 20/100-VU profiles. The 100-VU profile measured 213 transfers/s and 546 ms p95; recovery, duplicate-event and 103,578-posting backup/restore checks passed. Resources were deleted. See [measured cloud results and limits](docs/AZURE_BOOT4_VALIDATION.md); a continuously hosted demo is not provided.
 
+The transfer-query optimization removes four PostgreSQL statements per fresh transfer using the safe strategies and passes 59 regression tests. Its repeated Azure performance validation failed and did not complete (latency thresholds and projection catch-up); no stable percentage gain is claimed. See [optimization results and retained limits](docs/TRANSFER_QUERY_OPTIMIZATION.md).
+
 - [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)

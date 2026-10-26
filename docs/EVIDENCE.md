@@ -77,3 +77,12 @@ The [completed cloud acceptance](AZURE_BOOT4_VALIDATION.md) passed the unchanged
 The full-history assertions passed after asynchronous catch-up. Forty transfers succeeded during separate projection/Kafka interruptions; observed recovery after restart was 20.422 / 8.892 seconds. Ledger restart replay added no postings, and a duplicate event advanced consumer offsets without adding projection rows. A quiesced PostgreSQL logical backup restored 103,578 ledger postings into a separate database on the same managed server; all 11 application/migration table fingerprints matched. Final ledger/projection counts both equaled 103,578 with zero financial, statement or daily-summary drift. The on-host acceptance probe passed 22 HTTP checks including polling.
 
 Both exact images passed the configured HIGH/CRITICAL fixed-vulnerability gate with zero active exceptions. All three temporary resource groups (including two incomplete earlier attempts) were confirmed deleted. Raw receipts and the synthetic backup remain private; the [sanitized measurements](evidence/azure-boot4-2026-10-25.json), [chart](images/azure-validation-2026-10-25.png) and [resume wording](RESUME_AZURE_XYZ.md) are reviewable artifacts. Earlier failed/incomplete runs and the test limitations are documented in the full report.
+
+
+## 2026-10-26 transfer query optimization
+
+Application correctness: PASS (59 Linux Java 21 tests; zero failures/errors/skips). Fresh transfers remove four DB statements using paired INSERT RETURNING and locked-account metadata reuse. Five image-policy controls and both exact-image fixable HIGH/CRITICAL gates passed with zero exceptions.
+
+Repeated Azure performance validation: FAILED / INCOMPLETE. The P4 experiment stopped on case 4; the P15 repeat stopped on case 2. Six load samples across both experiments completed 143,706 successful transfers with zero HTTP failures. Four full post-load SQL validations passed; two were not reached because projection catch-up exceeded 180 seconds. These samples are not a completed six-case controlled comparison and are not pooled into a gain claim. The P15 failed observation had 24,354 postings, 18,268 statement rows and zero unpublished outbox records.
+
+Both temporary resource groups were confirmed absent; temporary registry credentials were removed. Source changes remain local on transfer-query-optimization. See [full scope, measurements and limits](TRANSFER_QUERY_OPTIMIZATION.md) and [sanitized receipt](evidence/transfer-query-optimization-2026-10-26.json).
