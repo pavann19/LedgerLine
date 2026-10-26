@@ -1,0 +1,166 @@
+{
+  "date": "2026-10-26",
+  "result": "PASS_WITH_LIMITS",
+  "baseline_parent_commit": "7a43584385e424dbaaa26a5ce4d6384a351a66c3",
+  "branch": "codex/oauth2-openapi-rate-limits",
+  "java_version": "21",
+  "command": "./mvnw clean verify -Pcoverage --batch-mode",
+  "tests": {
+    "ledger-service": {
+      "tests": 62,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "projection-service": {
+      "tests": 28,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  },
+  "policy_tests": {
+    "tests": 5,
+    "result": "PASS"
+  },
+  "verified": [
+    "RS256 bearer validation using actual HTTP requests and ephemeral public JWKS",
+    "issuer, audience, signature, expiration and subject rejection",
+    "new signing-key ID refresh and rejection of HMAC tokens in provider mode",
+    "CUSTOMER/OPERATOR role checks and ledger/projection account ownership",
+    "local HS256 claim/signature boundary regressions and local-mode MVC context startup",
+    "real OpenAPI and Swagger endpoints, OAuth2 code-flow schema and served PKCE setting",
+    "Swagger authorization persistence disabled",
+    "per-subject 429 Problem Details, Retry-After and forwarded-header/token-renewal bypass rejection",
+    "deterministic refill, concurrent consumption and bounded identity-state checks",
+    "existing financial, migration, outbox, replay and projection regression suite",
+    "Compose config parse and forwarding of provider/rate-limit environment to both services"
+  ],
+  "secret_scan": {
+    "scope": "staged source tree",
+    "raw_findings": 2,
+    "reviewed_test_only_jwt_fixtures": 2,
+    "other_findings": 0
+  },
+  "limits": [
+    "External identity-provider browser login, callback and token exchange not exercised",
+    "Rate limits are independent per service process, reset on restart and do not limit unauthenticated traffic",
+    "No new Azure performance run, live deployment, remote CI or image vulnerability scan"
+  ],
+  "private_receipt_sha256": [
+    {
+      "sha256": "7dd232835025c3925aedabaa317555ab2c5a051f90d871498772be5d79c5ccd6",
+      "artifact": "full-tests.log"
+    },
+    {
+      "sha256": "6136693a59234062ade0f84fd2227e5ba41cbbd7ab0ae16f6b86726e16b829d5",
+      "artifact": "staged-secret-scan.json"
+    }
+  ],
+  "source_files_sha256": [
+    {
+      "sha256": "2e213382fcdca9043eb8701ef82223b5012a7f78388bd9f780d34a2524408c1c",
+      "path": "README.md"
+    },
+    {
+      "sha256": "6aae0c31e90d7aadf8c980be4820eb8f5e6ed3b86d6b70ad03eff00fc16d2a49",
+      "path": "deploy/compose.yaml"
+    },
+    {
+      "sha256": "348a4f48dbbaf770a81acf2342a3aa72cd60c6a26922ff073fd817897d321baa",
+      "path": "docs/API_SECURITY.md"
+    },
+    {
+      "sha256": "7f740c66676a80fbde2b001768364f5dbe18a624d816c29e4d085f081423fbed",
+      "path": "docs/SECURITY.md"
+    },
+    {
+      "sha256": "601ec34108437f118e5f4f25fce82f632f03689177a461b183e64f24bb120333",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/api/AccountController.java"
+    },
+    {
+      "sha256": "443785c9f145dae6640fdb6911ee51eb11e695d829eae77135d0eb5eeb488663",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/api/OpenApiConfig.java"
+    },
+    {
+      "sha256": "c969742b0f795ea1750551f2df1e18ac9bf3ad69c00b82bfc6d5d409f2f3414e",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/api/TransferController.java"
+    },
+    {
+      "sha256": "4ed9f8fc51579c2eac6c04d4ee8fd9fcf8a5faae0065eabd5701dde131ba444f",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/security/JwtDecoderFactory.java"
+    },
+    {
+      "sha256": "c509040d6270fdea847b79d335425729991655b5a125293b5c71b24449bbb3cb",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/security/PrincipalRateLimitFilter.java"
+    },
+    {
+      "sha256": "8425b26b22e96e786919a702efc0e581ea6f9b5acb2e9a45e9b3a66d36b2b632",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/security/PrincipalRateLimiter.java"
+    },
+    {
+      "sha256": "2d07d5c173d05543ff2f4c8c74782e29e507e40ef3b0e6e1868fc6c2ae1e1687",
+      "path": "ledger-service/src/main/java/com/ledgerline/ledger/security/SecurityConfig.java"
+    },
+    {
+      "sha256": "05a1fce4da805481edf9fa07a25bd3a850559f3dc8305ec8614970d8e3966729",
+      "path": "ledger-service/src/main/resources/application.yml"
+    },
+    {
+      "sha256": "49230abd29c4287196961011f92474b414ef884d8098899c16505092591912d8",
+      "path": "ledger-service/src/test/java/com/ledgerline/ledger/security/ApiSecurityIntegrationTest.java"
+    },
+    {
+      "sha256": "c9ef09e3a6c2931e7c546869828337727bb7740a95a0c368de9a197fba8e8877",
+      "path": "ledger-service/src/test/java/com/ledgerline/ledger/security/OAuth2ConfigurationTest.java"
+    },
+    {
+      "sha256": "e50d88c886efea9df1c891ab35a6740ea66edd39ee0831ce45091c91ab723f3e",
+      "path": "ledger-service/src/test/java/com/ledgerline/ledger/security/PrincipalRateLimiterTest.java"
+    },
+    {
+      "sha256": "c7f6f2494847959962169fffb48d5e723c74e8bfa445ad5e61b9cbaea8679330",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/api/GlobalExceptionHandler.java"
+    },
+    {
+      "sha256": "b25dce0cb74da052a29af2634600ab72a27872f4be711fd26b09f62642d7bfb2",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/api/OpenApiConfig.java"
+    },
+    {
+      "sha256": "02096ef11808cb175cf2ce5fb17a39646e5093b2c7fe799dcf6c9294019471d7",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/api/ProjectionController.java"
+    },
+    {
+      "sha256": "12106b1f6880acb62e3f21f9e77f444c9468f8ec765bba411e4357ed6257bf63",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/security/JwtDecoderFactory.java"
+    },
+    {
+      "sha256": "dbe03259554bc316f938df632a28e2018bf11c465ef109648e0c971b411af9be",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/security/PrincipalRateLimitFilter.java"
+    },
+    {
+      "sha256": "168b465a821368801bfc5a2eede3c971b1b5a6c9e276e565a67b58adc42da0c4",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/security/PrincipalRateLimiter.java"
+    },
+    {
+      "sha256": "7d39d3195f3ecf2bb357597b85506a1d02fe67575069f4db8403f8e2a072f939",
+      "path": "projection-service/src/main/java/com/ledgerline/projection/security/SecurityConfig.java"
+    },
+    {
+      "sha256": "043dc530fd42c7bb9f36f793ba55e54e9b6e9be2a51f3b381dc405512a809266",
+      "path": "projection-service/src/main/resources/application.yml"
+    },
+    {
+      "sha256": "69d71cffce3883a2622e053178aaf7ace9ee2de1aed7aa6413caa8430c77fbab",
+      "path": "projection-service/src/test/java/com/ledgerline/projection/security/ApiSecurityIntegrationTest.java"
+    },
+    {
+      "sha256": "292e82c49af3f0af1484319a3ca40df910487da77fb87f75b8ab4529335dd63f",
+      "path": "projection-service/src/test/java/com/ledgerline/projection/security/OAuth2ConfigurationTest.java"
+    },
+    {
+      "sha256": "84279ce7dec81d3a7a4248d77ea65dc598ad4206412a89622d56613c273839d7",
+      "path": "projection-service/src/test/java/com/ledgerline/projection/security/PrincipalRateLimiterTest.java"
+    }
+  ]
+}

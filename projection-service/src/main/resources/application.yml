@@ -28,7 +28,20 @@ server:
 
 projection:
   security:
-    jwt-secret: ${JWT_SECRET}
+    mode: ${SECURITY_MODE:local-jwt}
+    jwt-secret: ${JWT_SECRET:}
+    issuer-uri: ${OAUTH2_ISSUER_URI:}
+    jwk-set-uri: ${OAUTH2_JWK_SET_URI:}
+    audience: ${OAUTH2_AUDIENCE:}
+    oauth2:
+      authorization-url: ${OAUTH2_AUTHORIZATION_URL:}
+      token-url: ${OAUTH2_TOKEN_URL:}
+    rate-limit:
+      enabled: ${RATE_LIMIT_ENABLED:true}
+      requests-per-second: ${RATE_LIMIT_REQUESTS_PER_SECOND:500}
+      burst: ${RATE_LIMIT_BURST:1000}
+      max-principals: ${RATE_LIMIT_MAX_PRINCIPALS:10000}
+      idle-seconds: ${RATE_LIMIT_IDLE_SECONDS:300}
   kafka:
     transfers-topic: ledger.transfers.v1
 
@@ -40,3 +53,10 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+
+springdoc:
+  swagger-ui:
+    persist-authorization: false
+    oauth:
+      client-id: ${OAUTH2_SWAGGER_CLIENT_ID:}
+      use-pkce-with-authorization-code-grant: true
