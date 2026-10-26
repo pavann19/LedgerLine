@@ -24,7 +24,7 @@ powershell -ExecutionPolicy Bypass -File scripts/local-demo.ps1
 
 The script generates a random signing secret and short-lived local tokens, creates accounts, performs funding and customer transfers, checks replay and projection results, and writes a git-ignored summary containing tokens. Cold image builds can take longer than five minutes. The evaluator and post-load reused-stack check were verified locally on 2026-10-24; see the evidence boundaries below.
 
-For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `docker compose -f deploy/compose.yaml up --build -d`. Both services are HS256 resource servers; an external trusted issuer must supply `sub`, `exp`, and `roles`. Customer projection access additionally requires signed `accounts` claims. This repository does not provide login, password storage, refresh tokens, or revocation.
+For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `docker compose -f deploy/compose.yaml up --build -d`. Both services default to local HS256 JWT validation. Optional OAuth2 provider mode validates RS256 access tokens with issuer and audience checks; trusted issuers must supply `sub`, `exp`, and `roles`. Customer projection access additionally requires signed `accounts` claims. This repository does not provide login, password storage, refresh tokens, or revocation.
 
 ## Test
 
@@ -43,6 +43,7 @@ The transfer-query optimization removes four PostgreSQL statements per fresh tra
 - [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)
+- [OAuth2, OpenAPI and rate limiting](docs/API_SECURITY.md)
 - [Financial invariants](docs/FINANCIAL_INVARIANTS.md)
 - [API usage](docs/api-examples.md)
 - [Database and deployment](docs/DATABASE_DEPLOYMENT.md)

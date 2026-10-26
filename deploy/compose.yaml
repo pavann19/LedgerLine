@@ -1,3 +1,20 @@
+# Authentication/rate-limit settings shared by both API containers.
+# Local mode rejects an empty secret at application startup; OAuth2 mode does not use one.
+x-api-security-environment: &api-security-environment
+  SECURITY_MODE: ${SECURITY_MODE:-local-jwt}
+  JWT_SECRET: ${JWT_SECRET:-}
+  OAUTH2_ISSUER_URI: ${OAUTH2_ISSUER_URI:-}
+  OAUTH2_JWK_SET_URI: ${OAUTH2_JWK_SET_URI:-}
+  OAUTH2_AUDIENCE: ${OAUTH2_AUDIENCE:-}
+  OAUTH2_AUTHORIZATION_URL: ${OAUTH2_AUTHORIZATION_URL:-}
+  OAUTH2_TOKEN_URL: ${OAUTH2_TOKEN_URL:-}
+  OAUTH2_SWAGGER_CLIENT_ID: ${OAUTH2_SWAGGER_CLIENT_ID:-}
+  RATE_LIMIT_ENABLED: ${RATE_LIMIT_ENABLED:-true}
+  RATE_LIMIT_REQUESTS_PER_SECOND: ${RATE_LIMIT_REQUESTS_PER_SECOND:-500}
+  RATE_LIMIT_BURST: ${RATE_LIMIT_BURST:-1000}
+  RATE_LIMIT_MAX_PRINCIPALS: ${RATE_LIMIT_MAX_PRINCIPALS:-10000}
+  RATE_LIMIT_IDLE_SECONDS: ${RATE_LIMIT_IDLE_SECONDS:-300}
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -81,11 +98,11 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     environment:
+      <<: *api-security-environment
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ledgerline
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
       LEDGER_OUTBOX_RELAY_ENABLED: "true"
       LEDGER_OUTBOX_RELAY_DELAY_MS: 200
     healthcheck:
@@ -107,11 +124,11 @@ services:
     ports:
       - "127.0.0.1:8081:8081"
     environment:
+      <<: *api-security-environment
       SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/ledgerline
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: postgres
       SPRING_KAFKA_BOOTSTRAP_SERVERS: kafka:9092
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
     depends_on:
       ledger-service:
         condition: service_healthy
