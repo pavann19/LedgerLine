@@ -203,6 +203,14 @@ def main():
         except Exception as error:
             event['invariants_passed'] = False
             event['validation_error'] = str(error)
+            try:
+                event['failure_state'] = json.loads(sql(
+                    "SELECT json_build_object('postings',(SELECT count(*) FROM postings),"
+                    "'statement_rows',(SELECT count(*) FROM statement_view),"
+                    "'unpublished_outbox',(SELECT count(*) FROM outbox WHERE published_at IS NULL),"
+                    "'processed_events',(SELECT count(*) FROM processed_events))", database))
+            except Exception as observation_error:
+                event['failure_observation_error'] = str(observation_error)
             report['result'] = 'VALIDATION_FAILED'
             save()
             raise
