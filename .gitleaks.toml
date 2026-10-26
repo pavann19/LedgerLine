@@ -1,0 +1,10 @@
+title = "LedgerLine secret scanning"
+[extend]
+useDefault = true
+# AND: only this exact synthetic secret in these exact test classes.
+[[allowlists]]
+description = "Known synthetic JWT boundary-test fixture"
+condition = "AND"
+regexTarget = "secret"
+regexes = ['^test-secret-with-at-least-32-bytes-long$']
+paths = ['(^|/)(ledger-service/src/test/java/com/ledgerline/ledger/security|projection-service/src/test/java/com/ledgerline/projection/security)/JwtBoundaryTest\.java$']
