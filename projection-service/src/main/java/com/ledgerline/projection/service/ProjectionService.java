@@ -23,14 +23,14 @@ public class ProjectionService {
 
     private static final Logger log = LoggerFactory.getLogger(ProjectionService.class);
 
-    private final ProcessedEventsRepository processedEventsRepository;
+    private final tools.jackson.databind.ObjectMapper objectMapper;
     private final ProjectionRepository projectionRepository;
 
     public ProjectionService(
-        ProcessedEventsRepository processedEventsRepository,
+        tools.jackson.databind.ObjectMapper objectMapper,
         ProjectionRepository projectionRepository
     ) {
-        this.processedEventsRepository = processedEventsRepository;
+        this.objectMapper = objectMapper;
         this.projectionRepository = projectionRepository;
     }
 
@@ -40,38 +40,21 @@ public class ProjectionService {
      */
     @Transactional
     public boolean projectTransfer(TransferEventPayload payload) {
-        boolean inserted = processedEventsRepository.tryMarkProcessed(payload.eventId(), Instant.now());
-        if (!inserted) {
-            log.info("Deduplication: Event {} already processed. Skipping projection.", payload.eventId());
-            return false;
+        return projectBatch(List.of(payload)) == 1;
+    }
+
+    @Transactional
+    public int projectBatch(List<TransferEventPayload> payloads) {
+        try {
+            // The internal SQL boundary uses ISO instants, independent of the Kafka mapper's numeric timestamp option.
+            var rows=payloads.stream().map(p -> java.util.Map.of(
+                "eventId",p.eventId().toString(),"transactionId",p.transactionId().toString(),
+                "fromAccountId",p.fromAccountId().toString(),"toAccountId",p.toAccountId().toString(),
+                "amountMinor",p.amountMinor(),"currency",p.currency(),"timestamp",p.timestamp().toString())).toList();
+            return projectionRepository.projectBatch(objectMapper.writeValueAsString(rows));
+        } catch (tools.jackson.core.JacksonException failure) {
+            throw new IllegalStateException("Cannot serialize projection batch", failure);
         }
-
-        List<UUID> affectedAccounts = java.util.stream.Stream.of(payload.fromAccountId(), payload.toAccountId())
-            .distinct()
-            .sorted(Comparator.comparing(UUID::toString))
-            .toList();
-        affectedAccounts.forEach(projectionRepository::lockAccount);
-
-        // 1. Project Debit (fromAccount: negative flow)
-        projectionRepository.insertAndProjectPosting(
-            payload.fromAccountId(),
-            payload.transactionId(),
-            -payload.amountMinor(),
-            payload.currency(),
-            payload.timestamp()
-        );
-
-        // 2. Project Credit (toAccount: positive flow)
-        projectionRepository.insertAndProjectPosting(
-            payload.toAccountId(),
-            payload.transactionId(),
-            payload.amountMinor(),
-            payload.currency(),
-            payload.timestamp()
-        );
-
-        log.debug("Successfully projected event {} for transaction {}", payload.eventId(), payload.transactionId());
-        return true;
     }
 
     @Transactional(readOnly = true)

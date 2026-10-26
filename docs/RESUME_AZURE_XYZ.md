@@ -6,4 +6,4 @@
 
 Interview context: bounded synthetic cloud tests, not production banking. Load generator shares the 4-vCPU / 8-GiB VM with the services; managed PostgreSQL uses D2ds_v5 with 32 GiB / 120 IOPS. Recovery timings are single observations. The restore used quiesced writers and a separate database on the same server; it is not cross-region disaster recovery. Both completed profiles total 51,744 transfers with zero HTTP failures and zero final financial/projection drift. No percentage performance improvement is claimed.
 
-Evidence: D:/LedgerLine/docs/AZURE_BOOT4_VALIDATION.md
+Evidence: [Azure validation](AZURE_BOOT4_VALIDATION.md)

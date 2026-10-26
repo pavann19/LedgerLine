@@ -32,15 +32,15 @@ public class TransferEventConsumer {
 
     @KafkaListener(
         topics = "${projection.kafka.transfers-topic:ledger.transfers.v1}",
-        groupId = "${spring.kafka.consumer.group-id:ledgerline-projection}"
+        groupId = "${spring.kafka.consumer.group-id:ledgerline-projection}", batch = "true"
     )
-    public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack) {
+    public void onMessages(java.util.List<ConsumerRecord<String, String>> records, Acknowledgment ack) {
         try {
-            TransferEventPayload payload = objectMapper.readValue(record.value(), TransferEventPayload.class);
-            log.info("Received event for projection: eventId={}, tx={}", payload.eventId(), payload.transactionId());
+            var payloads = new java.util.ArrayList<TransferEventPayload>(records.size());
+            for (var record : records) payloads.add(objectMapper.readValue(record.value(), TransferEventPayload.class));
 
             // 1. Process and commit in DB transaction
-            projectionService.projectTransfer(payload);
+            projectionService.projectBatch(payloads);
 
             // 2. Failure test hook
             if (simulateCrashBeforeOffsetCommit) {

@@ -70,6 +70,26 @@ public class AccountBalanceRepository {
             .update();
     }
 
+    /** Preserve the same Java UUID lock order used by the other strategies. */
+    public java.util.List<AccountBalance> findPairForUpdate(UUID first, UUID second) {
+        return jdbcClient.sql("""
+            SELECT account_id,balance_minor,account_type,version FROM account_balances
+            WHERE account_id IN (?,?)
+            ORDER BY CASE WHEN account_id=? THEN 0 ELSE 1 END FOR UPDATE
+            """).params(first,second,first).query(rowMapper).list();
+    }
+
+    public void updatePair(AccountBalance first, AccountBalance second) {
+        int changed = jdbcClient.sql("""
+            UPDATE account_balances b SET balance_minor=v.balance_minor,version=v.version
+            FROM (VALUES(CAST(? AS uuid),CAST(? AS bigint),CAST(? AS bigint)),
+                        (CAST(? AS uuid),CAST(? AS bigint),CAST(? AS bigint))) v(account_id,balance_minor,version)
+            WHERE b.account_id=v.account_id
+            """).params(first.accountId(),first.balanceMinor(),first.version(),
+                second.accountId(),second.balanceMinor(),second.version()).update();
+        if (changed != 2) throw new IllegalStateException("Both locked balances must be updated");
+    }
+
     public int updateBalanceOptimistic(UUID accountId, long newBalance, long expectedVersion) {
         String sql = """
             UPDATE account_balances 

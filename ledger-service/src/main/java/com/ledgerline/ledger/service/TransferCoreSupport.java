@@ -11,8 +11,7 @@ import com.ledgerline.ledger.exception.AccountNotFoundException;
 import com.ledgerline.ledger.exception.IdempotencyConflictException;
 import com.ledgerline.ledger.exception.InvalidTransferException;
 import com.ledgerline.ledger.repository.AccountRepository;
-import com.ledgerline.ledger.repository.AuditLogRepository;
-import com.ledgerline.ledger.repository.OutboxRepository;
+import com.ledgerline.ledger.repository.TransferWriteRepository;
 import com.ledgerline.ledger.repository.PostingRepository;
 import com.ledgerline.ledger.repository.TransactionRepository;
 import org.springframework.stereotype.Component;
@@ -32,8 +31,7 @@ public class TransferCoreSupport {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final PostingRepository postingRepository;
-    private final OutboxRepository outboxRepository;
-    private final AuditLogRepository auditLogRepository;
+    private final TransferWriteRepository transferWriteRepository;
     private final ObjectMapper objectMapper;
     private final CurrentPrincipal currentPrincipal;
 
@@ -41,16 +39,14 @@ public class TransferCoreSupport {
         AccountRepository accountRepository,
         TransactionRepository transactionRepository,
         PostingRepository postingRepository,
-        OutboxRepository outboxRepository,
-        AuditLogRepository auditLogRepository,
+        TransferWriteRepository transferWriteRepository,
         ObjectMapper objectMapper,
         CurrentPrincipal currentPrincipal
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.postingRepository = postingRepository;
-        this.outboxRepository = outboxRepository;
-        this.auditLogRepository = auditLogRepository;
+        this.transferWriteRepository = transferWriteRepository;
         this.objectMapper = objectMapper;
         this.currentPrincipal = currentPrincipal;
     }
@@ -138,71 +134,20 @@ public class TransferCoreSupport {
         TransferRequest request,
         Instant now
     ) {
-        // 1. Insert Transaction
-        Transaction tx = new Transaction(
-            transactionId,
-            idempotencyKey,
-            requestHash,
-            TransactionStatus.POSTED,
-            now
-        );
-        transactionRepository.insertTransaction(tx);
-
-        // 2. Insert Balanced Double-Entry Postings (Zero-Sum Invariant: -amount + amount = 0)
         String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
-        Posting debitPosting = new Posting(
-            null,
-            transactionId,
-            request.fromAccountId(),
-            -request.amountMinor(),
-            currency,
-            now
-        );
-        Posting creditPosting = new Posting(
-            null,
-            transactionId,
-            request.toAccountId(),
-            request.amountMinor(),
-            currency,
-            now
-        );
-        List<Posting> persistedPostings = postingRepository.insertPairReturning(debitPosting, creditPosting);
-
-        // 3. Insert Outbox Event for Async Kafka Relay
-        UUID eventId = UUID.randomUUID();
-        TransferEventPayload payload = new TransferEventPayload(
-            eventId,
-            transactionId,
-            request.fromAccountId(),
-            request.toAccountId(),
-            request.amountMinor(),
-            currency,
-            now
-        );
+        var payload = new TransferEventPayload(UUID.randomUUID(), transactionId, request.fromAccountId(),
+            request.toAccountId(), request.amountMinor(), currency, now);
+        String payloadJson;
         try {
-            String payloadJson = objectMapper.writeValueAsString(payload);
-            outboxRepository.insertEvent(new OutboxEvent(
-                null,
-                transactionId,
-                "TransferPosted",
-                payloadJson,
-                now,
-                null
-            ));
+            payloadJson = objectMapper.writeValueAsString(payload);
         } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize outbox event payload", e);
         }
-
-        // 4. Insert Audit Log
-        auditLogRepository.insertLog(new AuditLogEntry(
-            null,
-            currentPrincipal.id(),
-            "TRANSFER_POSTED",
-            transactionId.toString(),
-            now,
-            String.format("{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%d,\"currency\":\"%s\"}",
-                request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency)
-        ));
+        String details = String.format("{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%d,\"currency\":\"%s\"}",
+            request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency);
+        List<Posting> persistedPostings = transferWriteRepository.insert(transactionId, idempotencyKey,
+            requestHash, request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency,
+            now, payloadJson, currentPrincipal.id(), details);
 
         // 5. Return the stored IDs and timestamp precision from INSERT ... RETURNING.
         List<PostingDto> postingDtos = persistedPostings.stream()
