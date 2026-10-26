@@ -3,6 +3,7 @@ name: CI
 on:
   push:
     branches: [ main, master, financial-release-audit ]
+  workflow_dispatch:
   pull_request:
     branches: [ main, master ]
 
@@ -10,6 +11,21 @@ permissions:
   contents: read
 
 jobs:
+  secrets:
+    name: Secret scan (all refs)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - name: Scan all history with narrowly scoped fixture allowlist
+        run: >-
+          docker run --rm -v "$GITHUB_WORKSPACE:/repo"
+          ghcr.io/gitleaks/gitleaks@sha256:c00b6bd0aeb3071cbcb79009cb16a60dd9e0a7c60e2be9ab65d25e6bc8abbb7f
+          detect --source /repo --log-opts=--all --config /repo/.gitleaks.toml --redact --no-banner
+      - name: Verify fixture allowlist negative controls
+        run: python3 scripts/test_secret_scan_policy.py
+
   test:
     name: Build & Invariant Test Suite
     runs-on: ubuntu-latest
