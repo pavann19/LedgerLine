@@ -52,7 +52,10 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
     }
 
     @AfterAll
-    static void stopKafka() {
+    static void stopKafka(@Autowired org.springframework.kafka.core.DefaultKafkaProducerFactory<?, ?> producers) {
+        // Close producers while their fixture broker still exists; otherwise
+        // Spring's later JVM shutdown can spend its entire grace period flushing.
+        producers.destroy();
         kafka.stop();
     }
 

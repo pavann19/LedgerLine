@@ -44,6 +44,7 @@ The transfer-query optimization removes four PostgreSQL statements per fresh tra
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)
 - [OAuth2, OpenAPI and rate limiting](docs/API_SECURITY.md)
+- [Recovery and reconciliation interfaces](docs/RECOVERY_AND_RECONCILIATION.md)
 - [Financial invariants](docs/FINANCIAL_INVARIANTS.md)
 - [API usage](docs/api-examples.md)
 - [Database and deployment](docs/DATABASE_DEPLOYMENT.md)

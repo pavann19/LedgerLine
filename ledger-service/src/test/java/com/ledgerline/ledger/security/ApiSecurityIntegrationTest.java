@@ -122,6 +122,16 @@ class ApiSecurityIntegrationTest extends BaseIntegrationTest {
         assertEquals(200, request("/v3/api-docs", null).statusCode());
         assertTrue(response.headers().allValues("Set-Cookie").isEmpty());
     }
+    @Test void reconciliationAuthorityDoesNotInheritCustomerOrOperatorAccess() throws Exception {
+        String path = "/api/v1/ops/reconciliation";
+        assertEquals(401, request(path, null).statusCode());
+        for (String role : List.of("CUSTOMER", "OPERATOR")) {
+            assertEquals(403, request(path, sign(claims("reconciliation-" + role).claim("roles", List.of(role)))).statusCode());
+        }
+        // Disabled by default: authorized users still have no aggregate endpoint.
+        assertEquals(404, request(path, sign(claims("reconciliation-reader").claim("roles", List.of("RECONCILER")))).statusCode());
+        assertEquals(403, request(endpoint(), sign(claims("reconciliation-transfer-denied").claim("roles", List.of("RECONCILER")))).statusCode());
+    }
     @Test void rejectsMissingAuthenticationAndInsufficientRoles() throws Exception {
         assertEquals(401, request(endpoint(), null).statusCode());
         assertEquals(403, request(endpoint(), sign(claims("no-role").claim("roles", List.of("AUDITOR")))).statusCode());

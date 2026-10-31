@@ -39,6 +39,7 @@ public class SecurityConfig {
         return http.csrf(csrf -> csrf.disable())
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
+                .requestMatchers("/api/v1/ops/reconciliation").hasRole("RECONCILER")
                 .requestMatchers("/api/v1/**").hasAnyRole("CUSTOMER", "OPERATOR")
                 .anyRequest().denyAll())
             .exceptionHandling(errors -> errors

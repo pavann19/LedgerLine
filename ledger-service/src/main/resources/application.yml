@@ -24,6 +24,7 @@ spring:
         max.in.flight.requests.per.connection: 1
 
 server:
+  shutdown: graceful
   port: ${PORT:8080}
 
 management:

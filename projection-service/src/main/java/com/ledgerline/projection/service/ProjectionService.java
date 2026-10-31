@@ -50,7 +50,7 @@ public class ProjectionService {
             var rows=payloads.stream().map(p -> java.util.Map.of(
                 "eventId",p.eventId().toString(),"transactionId",p.transactionId().toString(),
                 "fromAccountId",p.fromAccountId().toString(),"toAccountId",p.toAccountId().toString(),
-                "amountMinor",p.amountMinor(),"currency",p.currency(),"timestamp",p.timestamp().toString())).toList();
+                "amountMinor",p.amountMinor(),"currency",p.currency(),"timestamp",p.timestamp().toString(),"correlationId",p.correlationId())).toList();
             return projectionRepository.projectBatch(objectMapper.writeValueAsString(rows));
         } catch (tools.jackson.core.JacksonException failure) {
             throw new IllegalStateException("Cannot serialize projection batch", failure);

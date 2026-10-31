@@ -53,8 +53,9 @@ public class TransferEventConsumer {
                 ack.acknowledge();
             }
         } catch (Exception e) {
-            log.error("Error processing projection event from Kafka: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed processing projection event", e);
+            // Exception messages can contain raw records; telemetry contains no payload.
+            log.error("Projection batch failed; records={}, failureClass={}", records.size(), e.getClass().getSimpleName());
+            throw new RuntimeException("Failed processing projection batch: " + e.getClass().getSimpleName());
         }
     }
 }

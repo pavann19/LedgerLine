@@ -22,6 +22,17 @@ class ProjectionDeduplicationTest extends BaseProjectionIntegrationTest {
     @Autowired private com.ledgerline.projection.consumer.TransferEventConsumer consumer;
     @Autowired private tools.jackson.databind.ObjectMapper mapper;
 
+    @Test void malformedSuffixCannotAcknowledgeOrProjectAHealthyPrefix() throws Exception {
+        var payload = new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),7,"USD",Instant.now());
+        var good = new org.apache.kafka.clients.consumer.ConsumerRecord<String,String>("test",0,1,"key",mapper.writeValueAsString(payload));
+        var bad = new org.apache.kafka.clients.consumer.ConsumerRecord<String,String>("test",0,2,"key","{malformed");
+        var acknowledged = new java.util.concurrent.atomic.AtomicBoolean();
+        assertThrows(RuntimeException.class, () -> consumer.onMessages(List.of(good,bad), () -> acknowledged.set(true)));
+        assertFalse(acknowledged.get());
+        assertFalse(processedEventsRepository.isProcessed(payload.eventId()));
+        assertTrue(projectionService.getStatement(payload.fromAccountId(),10,0).isEmpty());
+    }
+
     @Test
     void batchAcknowledgesOnlyAfterCommitAndRedeliveryDoesNotDuplicate() throws Exception {
         var payload=new TransferEventPayload(UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),UUID.randomUUID(),7,"USD",Instant.now());

@@ -136,7 +136,8 @@ public class TransferCoreSupport {
     ) {
         String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
         var payload = new TransferEventPayload(UUID.randomUUID(), transactionId, request.fromAccountId(),
-            request.toAccountId(), request.amountMinor(), currency, now);
+            request.toAccountId(), request.amountMinor(), currency, now,
+            java.util.Optional.ofNullable(org.slf4j.MDC.get("request_id")).orElse(transactionId.toString()));
         String payloadJson;
         try {
             payloadJson = objectMapper.writeValueAsString(payload);
