@@ -54,3 +54,11 @@ The transfer-query optimization removes four PostgreSQL statements per fresh tra
 - [Isolation experiment method](docs/experiments/01-isolation.md)
 
 The database user in local Compose has administrative privileges. Direct SQL can alter balances without postings, append to old transactions, disable triggers, or truncate history. SQL administrators and Kafka publishers are trusted. Projection data is eventually consistent and is never the balance authority. No guarantee of exactly-once end-to-end processing, uninterrupted delivery, deadlock elimination across all strategies, or safe internet deployment is made.
+
+The recovery and reconciliation candidate passed 66 ledger and 36 projection
+tests in separate clean module runs, plus nine worker regressions. Those local
+results do not establish a fresh whole-reactor or hosted CI pass. The original
+two-account latency gate remains failed; a separate many-account workload cannot
+replace it. See the recovery guide for migration and rollback limits. No
+repository license has been selected; no additional redistribution permission is
+asserted.
