@@ -2,7 +2,6 @@
   "date": "2026-10-26",
   "result": "PASS_WITH_LIMITS",
   "baseline_parent_commit": "7a43584385e424dbaaa26a5ce4d6384a351a66c3",
-  "branch": "codex/oauth2-openapi-rate-limits",
   "java_version": "21",
   "command": "./mvnw clean verify -Pcoverage --batch-mode",
   "tests": {
