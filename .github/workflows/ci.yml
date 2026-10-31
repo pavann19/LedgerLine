@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [ main, master, financial-release-audit ]
+    branches: [ main, master, financial-release-audit, 'codex/publication-20261031' ]
   workflow_dispatch:
   pull_request:
     branches: [ main, master ]
