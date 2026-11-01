@@ -607,98 +607,6 @@ streams/src/main/java/org/apache/kafka/streams/state/internals/Murmur3.java
 
 ==============================================================================
 Components/files:
-  pkg:maven/io.swagger.core.v3/swagger-models-jakarta@2.2.47/io/swagger/v3/oas/models/info/License.class
-Text SHA-256: 18d654b3494958b6cb35cb10ecdb4ebd0ac3554e64274bcc163aef3df3285934
-------------------------------------------------------------------------------
-����   4 �
- 	 Y	  Z	  [	  \	  ]
- 	 ^ _
- ` a b
- ` c
- d e f
- d g h
-  Y
- i j k l
-  m n
-  Y o
-  p q
-  r s t u v
-  w x
- 	 w y
- d z name Ljava/lang/String; url 
-identifier RuntimeInvisibleAnnotations 0Lio/swagger/v3/oas/models/annotations/OpenAPI31; 
-extensions Ljava/util/Map; 	Signature 5Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>; <init> ()V Code LineNumberTable LocalVariableTable this 'Lio/swagger/v3/oas/models/info/License; getName ()Ljava/lang/String; setName (Ljava/lang/String;)V ;(Ljava/lang/String;)Lio/swagger/v3/oas/models/info/License; getUrl setUrl 
-getIdentifier 
-setIdentifier equals (Ljava/lang/Object;)Z o Ljava/lang/Object; license 
-StackMapTable hashCode ()I 
-getExtensions ()Ljava/util/Map; 7()Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>; 
-addExtension '(Ljava/lang/String;Ljava/lang/Object;)V value addExtension31 
-setExtensions (Ljava/util/Map;)V LocalVariableTypeTable 8(Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;)V 8(Ljava/util/Map;)Lio/swagger/v3/oas/models/info/License; ^(Ljava/util/Map<Ljava/lang/String;Ljava/lang/Object;>;)Lio/swagger/v3/oas/models/info/License; toString sb Ljava/lang/StringBuilder; toIndentedString &(Ljava/lang/Object;)Ljava/lang/String; 
-SourceFile 
-License.java
- - .
- # $
- % $
- & $
- ) *
- { | %io/swagger/v3/oas/models/info/License }
- = ~ java/lang/Object
-  � �
- � � x-
- � � java/util/LinkedHashMap �
- � � x-oas- x-oai-
- H I java/lang/StringBuilder class License {
-
- � � 
-    name:
- U V 
- 	    url:      identifier:  }
- R 5 null 
-
- � � getClass ()Ljava/lang/Class; java/util/Objects '(Ljava/lang/Object;Ljava/lang/Object;)Z hash ([Ljava/lang/Object;)I java/lang/String isEmpty ()Z 
-startsWith (Ljava/lang/String;)Z 
-java/util/Map put 8(Ljava/lang/Object;Ljava/lang/Object;)Ljava/lang/Object; append -(Ljava/lang/String;)Ljava/lang/StringBuilder; replace D(Ljava/lang/CharSequence;Ljava/lang/CharSequence;)Ljava/lang/String; !  	     # $    % $    & $  '     (    ) *  +    ,   - .  /   S     *� *� *� *� *� �    0          	      1   
-     2 3    4 5  /   /     *� �    0         1   
-     2 3    6 7  /   >     *+� �    0   
-    $  % 1        2 3      # $   # 8  /   ?     *+� *�    0   
-    (  ) 1        2 3      # $   9 5  /   /     *� �    0       3 1   
-     2 3    : 7  /   >     *+� �    0   
-    7  8 1        2 3      % $   % 8  /   ?     *+� *�    0   
-    ;  < 1        2 3      % $   ; 5  /   /     *� �    0       G 1   
-     2 3   '     (    < 7  /   >     *+� �    0   
-    K  L 1        2 3      & $  '     (    & 8  /   ?     *+� *�    0   
-    O  P 1        2 3      & $  '     (    = >  /   �     [*+� �+� *� +� � �+� M*� ,� � � 1*� ,� � � #*� ,� � � *� ,� � � � �    0   * 
-   U  V  X  Y  [ 
- \ 3 ] A ^ O _ Z \ 1        [ 2 3     [ ? @  
- > A 3  B   
- � @ @  C D  /   N     $� 	Y*� SY*� SY*� SY*� S� 
-�    0       d 1   
-    $ 2 3    E F  /   /     *� �    0       h 1   
-     2 3   +    G  H I  /   �     4+� +� 
-� 
-+
-� 
-� �*� � *� Y� � *� +,�  W�    0       l  m  o 
- p ' r 3 s 1        4 2 3     4 # $    4 J @  B       K I  /   r     
-+� +� 
-� 
-+� 
-� �*+,� �    0       w  x  z 
- { 1        
- 2 3     
- # $    
- J @  B      '     (    L M  /   P     *+� �    0   
-    ~   1        2 3      ) *  N   
-     ) ,  +    O  ) P  /   Q     *+� *�    0   
-    �  � 1        2 3      ) *  N   
-     ) ,  +    Q  R 5  /   �     `� Y� L+� W+� **� � � � W+� **� � � � W+
-� **� � � � W+
-� W+� 
-�    0   
-    �  �  � & � = � T � [ � 1       ` 2 3    X S T   U V  /   X     +� �+�  !� "�    0       �  �  � 1        2 3      ? @  B      W    X
-
-==============================================================================
-Components/files:
   pkg:maven/com.fasterxml/classmate@1.7.3/META-INF/NOTICE
 Text SHA-256: 1a8c67aaade274bc7bf06a7044571ab280d59fe3686941b6499b2176a072ea6d
 ------------------------------------------------------------------------------
@@ -1129,45 +1037,25 @@ Components/files:
 Text SHA-256: 4e7f90c86ab51278228bce153122f1d8df30149d13ce9ef524c8444a84c32dcc
 ------------------------------------------------------------------------------
 Copyright (c) 2004-2022 QOS.ch Sarl (Switzerland)
-
 All rights reserved.
 
-
-
 Permission is hereby granted, free  of charge, to any person obtaining
-
 a  copy  of this  software  and  associated  documentation files  (the
-
 "Software"), to  deal in  the Software without  restriction, including
-
 without limitation  the rights to  use, copy, modify,  merge, publish,
-
 distribute,  sublicense, and/or sell  copies of  the Software,  and to
-
 permit persons to whom the Software  is furnished to do so, subject to
-
 the following conditions:
 
-
-
 The  above  copyright  notice  and  this permission  notice  shall  be
-
 included in all copies or substantial portions of the Software.
 
-
-
 THE  SOFTWARE IS  PROVIDED  "AS  IS", WITHOUT  WARRANTY  OF ANY  KIND,
-
 EXPRESS OR  IMPLIED, INCLUDING  BUT NOT LIMITED  TO THE  WARRANTIES OF
-
 MERCHANTABILITY,    FITNESS    FOR    A   PARTICULAR    PURPOSE    AND
-
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-
 LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-
 OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
-
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
@@ -1482,45 +1370,25 @@ Components/files:
 Text SHA-256: 6632f550c207be8d7d6b5e87f5d7b905bee218d18392d531df457bf60bec1447
 ------------------------------------------------------------------------------
 Copyright (c) 2004-2023 QOS.ch
-
 All rights reserved.
 
-
-
 Permission is hereby granted, free  of charge, to any person obtaining
-
 a  copy  of this  software  and  associated  documentation files  (the
-
 "Software"), to  deal in  the Software without  restriction, including
-
 without limitation  the rights to  use, copy, modify,  merge, publish,
-
 distribute,  sublicense, and/or sell  copies of  the Software,  and to
-
 permit persons to whom the Software  is furnished to do so, subject to
-
 the following conditions:
 
-
-
 The  above  copyright  notice  and  this permission  notice  shall  be
-
 included in all copies or substantial portions of the Software.
 
-
-
 THE  SOFTWARE IS  PROVIDED  "AS  IS", WITHOUT  WARRANTY  OF ANY  KIND,
-
 EXPRESS OR  IMPLIED, INCLUDING  BUT NOT LIMITED  TO THE  WARRANTIES OF
-
 MERCHANTABILITY,    FITNESS    FOR    A   PARTICULAR    PURPOSE    AND
-
 NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
-
 LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
-
 OF CONTRACT, TORT OR OTHERWISE,  ARISING FROM, OUT OF OR IN CONNECTION
-
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ==============================================================================
@@ -2458,23 +2326,6 @@ as per accompanying LICENSE file.
 A list of contributors may be found from CREDITS file, which is included
 in some artifacts (usually source distributions); but is always available
 from the source code management (SCM) system project uses.
-
-==============================================================================
-Components/files:
-  pkg:maven/io.swagger.core.v3/swagger-annotations-jakarta@2.2.47/io/swagger/v3/oas/annotations/info/License.class
-Text SHA-256: 754f594a02a0b1588353e5446a7a1a5c5cd00ad9d6066fc70e6a8daeae9a7f02
-------------------------------------------------------------------------------
-����   4     name ()Ljava/lang/String; AnnotationDefault   url 
-extensions 7()[Lio/swagger/v3/oas/annotations/extensions/Extension; 
-identifier RuntimeVisibleAnnotations )Lio/swagger/v3/oas/annotations/OpenAPI31; 
-SourceFile 
-License.java 
-Ljava/lang/annotation/Target; value  Ljava/lang/annotation/Retention; &Ljava/lang/annotation/RetentionPolicy; RUNTIME *io/swagger/v3/oas/annotations/info/License java/lang/Object java/lang/annotation/Annotation&              s        s  	 
-     [   
-      s  
-     
-         
-       [     e  
 
 ==============================================================================
 Components/files:
