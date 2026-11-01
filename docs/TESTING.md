@@ -33,8 +33,8 @@ MoneyJsonTest, ReleaseBoundaryTest, PrincipalScopeTest, JwtBoundaryTest, and Tra
 | Invalid amount/body | Reject before financial writes | JSON/core validation; malformed API checks |
 | Foreign source/read | Forbidden, no money movement | PrincipalScopeTest and API smoke |
 | Database unavailable | Fail/rollback; retry ambiguous commit with same key | Connection-loss injection UNVERIFIED |
-| Transaction timeout | Rollback before commit; ambiguity if response lost | Dedicated timeout injection UNVERIFIED |
-| Deadlock | DB aborts victim; default API may return error; SSI bounded retry | Dedicated deterministic deadlock UNVERIFIED |
+| Transaction timeout | Rollback before commit; ambiguity if response lost | DatabaseFailureRecoveryTest injects a PostgreSQL statement timeout after writes; rollback and same-key retry are checked |
+| Deadlock | DB aborts victim; default API may return error; SSI bounded retry | DatabaseFailureRecoveryTest creates a real PostgreSQL deadlock and checks victim rollback and retained financial invariants |
 | Serialization conflict | Retry entire transaction at most five times | IsolationExperimentTest; exhaustion can fail |
 | Duplicate same key/body | Original transaction, one mutation | Idempotency and exhausted-funds regressions |
 | Same key/different body | Conflict, no new transfer | IdempotencyIntegrationTest |
@@ -49,9 +49,9 @@ MoneyJsonTest, ReleaseBoundaryTest, PrincipalScopeTest, JwtBoundaryTest, and Tra
 | Stale version | Optimistic write rejects/retries | IsolationExperimentTest |
 | Concurrent debit | Protected balance cannot overdraw | Barrier-based database regression and stress |
 | Closure race | No closure API; metadata locks protect SQL status changes during transaction | FinancialEdgeRegressionTest coordinates an uncommitted closure and observes pg_blocking_pids before releasing the writer |
-| Poison Kafka record | Spring Kafka default recovery may stop retries and skip a record | Poison-message/reconciliation behavior UNVERIFIED |
+| Poison Kafka record | Bounded retries, then durable quarantine before offset recovery | ProjectionRecoveryIntegrationTest checks parking, parking failure and duplicate handling; quarantine requires operator review |
 
-No mock, infrastructure startup failure, old artifact, or skipped job counts as PASS. CI only runs on main/master push or pull requests targeting them. No commit/push occurred in this audit, so new remote CI is unverified. Image scan gate needs exact freshly built images; archived reports are not current results.
+No mock, infrastructure startup failure, old artifact, or skipped job counts as PASS. The publication candidate has passing hosted CI and a separate reconciliation-worker workflow; [verification status](VERIFICATION.md) records the exact source revision. Later revisions require their own passing checks. Image scan gate needs exact freshly built images; archived reports are not current results.
 
 The unchanged k6 correctness profile exercises synchronous transfer responses; it does not verify projection catch-up. Running the evaluator on an existing database/broker with a large backlog can exceed its 60-second statement wait. Its failure is not proof of a failed financial commit and must not be presented as a passing evaluator run. Historical seeded/broken-variant database volumes are not clean financial baselines; preserve them and use a separate fresh environment for clean evidence.
 

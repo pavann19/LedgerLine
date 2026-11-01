@@ -31,3 +31,18 @@ __pycache__/
 .private-evidence/
 private-backups/
 **/ledgerline-acceptance/
+
+# Local credentials, Python caches and runtime agent state; never public evidence.
+.env.*
+!.env.example
+*.pyo
+*.sqlite
+*.sqlite3
+*.sqlite-wal
+*.sqlite-shm
+*.sqlite3-wal
+*.sqlite3-shm
+
+.venv/
+venv/
+.pytest_cache/

@@ -1,5 +1,13 @@
 # Architecture
 
+## Recovery and advisory worker boundary
+
+Projection consumption retries a failing transactional batch with bounded retries. Durable quarantine must succeed before recovery acknowledges the offset; parking failure leaves the obligation unresolved. Quarantine requires investigation and is not proof of projection catch-up.
+
+Optional reconciliation exposes aggregate drift, lag and quarantine obligations through a dedicated read-only database role. Unknown lag remains unknown; sequential service reads are not an atomic cross-database snapshot. Correlation connects outbox, consumption and quarantine evidence without making delivery exactly once.
+
+The [reconciliation worker](../reconciliation-agent/README.md) uses fixed aggregate HTTP reads and its own SQLite queue. It cannot execute financial SQL, replay transfers, alter Kafka offsets or repair balances. See [recovery procedures](RECOVERY_AND_RECONCILIATION.md) and [verification limits](VERIFICATION.md).
+
 Two Spring Boot services use JDBC and PostgreSQL. The ledger service is the synchronous balance authority; the projection service consumes Kafka into eventual statements and daily summaries. There is no ORM, cache, payment gateway, FX provider, or distributed transaction.
 
 ```mermaid
