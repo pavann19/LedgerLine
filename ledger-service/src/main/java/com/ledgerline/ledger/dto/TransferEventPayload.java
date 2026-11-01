@@ -10,5 +10,10 @@ public record TransferEventPayload(
     UUID toAccountId,
     long amountMinor,
     String currency,
-    Instant timestamp
-) {}
+    Instant timestamp,
+    String correlationId
+) {
+    public TransferEventPayload(UUID eventId,UUID transactionId,UUID fromAccountId,UUID toAccountId,long amountMinor,String currency,Instant timestamp) {
+        this(eventId,transactionId,fromAccountId,toAccountId,amountMinor,currency,timestamp,transactionId.toString());
+    }
+}

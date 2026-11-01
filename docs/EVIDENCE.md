@@ -57,14 +57,32 @@ Compressed isolation inputs/results are HISTORICAL single-machine observations, 
 Production operation, real-money use, high availability, exactly-once end-to-end processing, and complete failure injection are UNVERIFIED. Historical SQL-funded/broken-experiment volumes are not clean accounting baselines; preserve them and use a separate fresh environment for clean evaluation. See [testing limitations](TESTING.md).
 
 
-## Spring Boot 4 migration — 2026-10-25
+## Spring Boot 4 migration â€” 2026-10-25
 
 Spring Boot 4.0.9 / Spring Framework 7.0.10 preserves Java 21, financial assertions, SQL migrations and benchmark workloads. Jackson 3 compatibility tests preserve integer money values, record field order and numeric nanosecond event timestamps, including reading legacy Jackson 2 events. Boot-specific MVC, security, Kafka, Flyway and test starters replace the older starter layout. Released dependencies resolve through the project-local Maven Central mirror.
 
 [Migration CI](https://github.com/pavann19/LedgerLine/actions/runs/40176097472) passed 55 Java tests with zero failures, errors or skips, five policy tests, both images and their security gates. Both previous Spring MVC applicability exceptions are retired; the policy contains no active exceptions.
 
-Local Java 21 container validation completed the unchanged 100-second, 20-VU workload: 4,762 successful transfers, zero HTTP failures, 9,527 scoped ledger and projection rows, and zero balance, statement or daily-summary drift. The reused-stack evaluator and all 16 API regressions passed. This is a bounded local correctness run, not a dedicated capacity benchmark. The earlier Azure acceptance remains evidence for the historical Boot 3 revision; Boot 4 has not been deployed to Azure.
+Local Java 21 container validation completed the unchanged 100-second, 20-VU workload: 4,762 successful transfers, zero HTTP failures, 9,527 scoped ledger and projection rows, and zero balance, statement or daily-summary drift. The reused-stack evaluator and all 16 API regressions passed. This is a bounded local correctness run, not a dedicated capacity benchmark. The earlier Azure acceptance remains evidence for the historical Boot 3 revision; At this migration gate, Boot 4 had not yet been deployed to Azure; the subsequent cloud verification is recorded below.
 
 Both exact local runtime images also passed Trivy 0.74.0 with zero findings under the configured HIGH/CRITICAL, fixed-vulnerability filter and zero applicability exceptions. This does not claim all-severity or unfixed-vulnerability absence. Both public OpenAPI endpoints returned HTTP 200. Metrics remain denied by the existing security policy.
 
 For existing-data compatibility, a read-only copy of the stopped, previously verified PostgreSQL volume was started separately. Both Boot 4 services reached health UP with outbox relay and Kafka consumption disabled; Flyway validated the existing ledger V4 and projection V2 histories. Counts and content hashes of all nine application tables and both migration-history tables were identical before and after startup. The original database was not modified. This verifies data-preserving startup, not an online rolling upgrade or mixed-version operation.
+
+
+## Boot 4 Azure performance and recovery - 2026-10-25
+
+The [completed cloud acceptance](AZURE_BOOT4_VALIDATION.md) passed the unchanged correctness and performance profiles on a dedicated 4-vCPU / 8-GiB Azure VM with managed PostgreSQL D2ds_v5 (32 GiB / 120 IOPS): 19,726 transfers / 100 seconds at 110 ms p95 and 32,018 transfers / 150 seconds at 546 ms p95, both with zero HTTP failures. These are bounded staged tests with peak 20/100 virtual users; the generator shares the VM with the services. No production capacity or percentage-improvement claim is made.
+
+The full-history assertions passed after asynchronous catch-up. Forty transfers succeeded during separate projection/Kafka interruptions; observed recovery after restart was 20.422 / 8.892 seconds. Ledger restart replay added no postings, and a duplicate event advanced consumer offsets without adding projection rows. A quiesced PostgreSQL logical backup restored 103,578 ledger postings into a separate database on the same managed server; all 11 application/migration table fingerprints matched. Final ledger/projection counts both equaled 103,578 with zero financial, statement or daily-summary drift. The on-host acceptance probe passed 22 HTTP checks including polling.
+
+Both exact images passed the configured HIGH/CRITICAL fixed-vulnerability gate with zero active exceptions. All three temporary resource groups (including two incomplete earlier attempts) were confirmed deleted. Raw receipts and the synthetic backup remain private; the [sanitized measurements](evidence/azure-boot4-2026-10-25.json) and [chart](images/azure-validation-2026-10-25.png) are reviewable artifacts. Earlier failed/incomplete runs and the test limitations are documented in the full report.
+
+
+## 2026-10-26 transfer query optimization
+
+Application correctness: PASS (59 Linux Java 21 tests; zero failures/errors/skips). Fresh transfers remove four DB statements using paired INSERT RETURNING and locked-account metadata reuse. Five image-policy controls and both exact-image fixable HIGH/CRITICAL gates passed with zero exceptions.
+
+Repeated Azure performance validation: FAILED / INCOMPLETE. The P4 experiment stopped on case 4; the P15 repeat stopped on case 2. Six load samples across both experiments completed 143,706 successful transfers with zero HTTP failures. Four full post-load SQL validations passed; two were not reached because projection catch-up exceeded 180 seconds. These samples are not a completed six-case controlled comparison and are not pooled into a gain claim. The P15 failed observation had 24,354 postings, 18,268 statement rows and zero unpublished outbox records.
+
+Both temporary resource groups were confirmed absent; temporary registry credentials were removed. That verification preceded publication of the feature branch; it does not validate later source changes. See [full scope, measurements and limits](TRANSFER_QUERY_OPTIMIZATION.md) and [sanitized receipt](evidence/transfer-query-optimization-2026-10-26.json).

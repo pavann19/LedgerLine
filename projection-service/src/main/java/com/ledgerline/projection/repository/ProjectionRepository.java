@@ -50,81 +50,40 @@ public class ProjectionRepository {
             .single();
     }
 
-    private void insertStatementView(
-        UUID accountId,
-        UUID transactionId,
-        long amountMinor,
-        long runningBalanceMinor,
-        String currency,
-        Instant createdAt
-    ) {
-        String sql = """
-            INSERT INTO statement_view (account_id, transaction_id, amount_minor, running_balance_minor, currency, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
-            """;
-        jdbcClient.sql(sql)
-            .params(
-                accountId,
-                transactionId,
-                amountMinor,
-                runningBalanceMinor,
-                currency,
-                Timestamp.from(createdAt)
-            )
-            .update();
+    public int projectBatch(String payloads) {
+        try {
+            return jdbcClient.sql("SELECT project_statement_batch(CAST(? AS jsonb))")
+                .param(payloads).query(Integer.class).single();
+        } catch (org.springframework.dao.DataAccessException failure) {
+            for (Throwable cause=failure; cause!=null; cause=cause.getCause()) {
+                if (cause instanceof java.sql.SQLException sql && "22003".equals(sql.getSQLState())) {
+                    var overflow=new ArithmeticException("Projection amount exceeds signed 64-bit range");
+                    overflow.initCause(failure);
+                    throw overflow;
+                }
+            }
+            throw failure;
+        }
     }
 
     /** Caller must hold the transaction-scoped account lock. Equal timestamps append by id. */
     public void insertAndProjectPosting(UUID accountId, UUID transactionId, long amountMinor,
         String currency, Instant createdAt) {
-        Timestamp time = Timestamp.from(createdAt);
-        long precedingBalance = jdbcClient.sql("""
-            SELECT running_balance_minor FROM statement_view
-            WHERE account_id = ? AND created_at <= ?
-            ORDER BY created_at DESC, id DESC LIMIT 1
-            """).params(accountId, time).query(Long.class).optional().orElse(0L);
-        long runningBalance = Math.addExact(precedingBalance, amountMinor);
-        insertStatementView(accountId, transactionId, amountMinor, runningBalance, currency, createdAt);
-
-        // In-order events touch no old rows. A late event repairs only its suffix.
-        jdbcClient.sql("""
-            UPDATE statement_view SET running_balance_minor = running_balance_minor + ?
-            WHERE account_id = ? AND created_at > ?
-            """).params(amountMinor, accountId, time).update();
-
-        // PostgreSQL rounds timestamps to microseconds; use its persisted day at midnight boundaries.
-        LocalDate day = jdbcClient.sql("SELECT (CAST(? AS timestamptz) AT TIME ZONE 'UTC')::date")
-            .param(time).query(Date.class).single().toLocalDate();
-        Timestamp start = Timestamp.from(day.atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
-        Timestamp end = Timestamp.from(day.plusDays(1).atStartOfDay(java.time.ZoneOffset.UTC).toInstant());
-        long opening = jdbcClient.sql("""
-            SELECT running_balance_minor - amount_minor FROM statement_view
-            WHERE account_id = ? AND created_at >= ? AND created_at < ?
-            ORDER BY created_at, id LIMIT 1
-            """).params(accountId, start, end).query(Long.class).single();
-        long closing = jdbcClient.sql("""
-            SELECT running_balance_minor FROM statement_view
-            WHERE account_id = ? AND created_at >= ? AND created_at < ?
-            ORDER BY created_at DESC, id DESC LIMIT 1
-            """).params(accountId, start, end).query(Long.class).single();
-        jdbcClient.sql("""
-            INSERT INTO daily_account_summary
-                (account_id, summary_date, opening_balance_minor, closing_balance_minor,
-                 total_inflow_minor, total_outflow_minor, posting_count)
-            VALUES (?, ?, ?, ?, ?, ?, 1)
-            ON CONFLICT (account_id, summary_date) DO UPDATE SET
-                opening_balance_minor = EXCLUDED.opening_balance_minor,
-                closing_balance_minor = EXCLUDED.closing_balance_minor,
-                total_inflow_minor = daily_account_summary.total_inflow_minor + EXCLUDED.total_inflow_minor,
-                total_outflow_minor = daily_account_summary.total_outflow_minor + EXCLUDED.total_outflow_minor,
-                posting_count = daily_account_summary.posting_count + 1
-            """).params(accountId, Date.valueOf(day), opening, closing,
-                Math.max(amountMinor, 0), amountMinor < 0 ? Math.negateExact(amountMinor) : 0).update();
-        jdbcClient.sql("""
-            UPDATE daily_account_summary
-            SET opening_balance_minor = opening_balance_minor + ?, closing_balance_minor = closing_balance_minor + ?
-            WHERE account_id = ? AND summary_date > ?
-            """).params(amountMinor, amountMinor, accountId, Date.valueOf(day)).update();
+        try {
+            jdbcClient.sql("SELECT project_statement_posting(?, ?, ?, ?, ?)")
+                .params(accountId, transactionId, amountMinor, currency, Timestamp.from(createdAt))
+                .query((rs, row) -> 0).single();
+        } catch (org.springframework.dao.DataAccessException failure) {
+            // Preserve the checked-money contract when PostgreSQL rejects BIGINT overflow.
+            for (Throwable cause = failure; cause != null; cause = cause.getCause()) {
+                if (cause instanceof java.sql.SQLException sql && "22003".equals(sql.getSQLState())) {
+                    var overflow = new ArithmeticException("Projection amount exceeds signed 64-bit range");
+                    overflow.initCause(failure);
+                    throw overflow;
+                }
+            }
+            throw failure;
+        }
     }
 
     public List<StatementViewEntry> getStatement(UUID accountId, int limit, int offset) {

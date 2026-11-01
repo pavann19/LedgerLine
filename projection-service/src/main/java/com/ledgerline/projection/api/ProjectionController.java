@@ -9,6 +9,9 @@ import org.springframework.security.core.Authentication;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.responses.ApiResponse;
+import io.swagger.v3.oas.annotations.responses.ApiResponses;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -26,6 +29,7 @@ public class ProjectionController {
         this.authorizer = authorizer;
     }
 
+    @Operation(summary = "Read an account statement", description = "Eventually consistent projection. Customers need the account UUID in the signed accounts claim; operators bypass this claim check. Pagination is capped at 100.")
     @GetMapping("/statement")
     public ResponseEntity<CursorPage<StatementViewEntry>> getStatement(
         @PathVariable UUID id,
@@ -37,6 +41,8 @@ public class ProjectionController {
         return ResponseEntity.ok(projectionService.getStatement(id, limit, cursor));
     }
 
+    @Operation(summary = "Read a daily summary", description = "Date defaults to the current UTC date. Projection may lag committed transfers.")
+    @ApiResponse(responseCode = "404", description = "No summary exists for the requested date")
     @GetMapping("/summary")
     public ResponseEntity<DailyAccountSummary> getDailySummary(
         @PathVariable UUID id,

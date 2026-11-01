@@ -1,6 +1,23 @@
 param(
     [string]$Location = "centralindia",
     [string]$VmSize = "Standard_D2ls_v6",
+    [string]$PostgresSku = "Standard_B1ms",
+    [ValidateSet("Burstable", "GeneralPurpose")]
+    [string]$PostgresTier = "Burstable",
+    [ValidateSet("P4", "P6", "P10", "P15", "P20", "P30", "P40", "P50")]
+    [string]$PostgresPerformanceTier = "P4",
+    [ValidateSet('Premium_LRS','PremiumV2_LRS')][string]$PostgresStorageType = 'Premium_LRS',
+    [int]$PostgresStorageIops = 3000,
+    [int]$PostgresStorageThroughput = 125,
+    [string]$LedgerMemory = "900m",
+    [decimal]$LedgerCpu = 0.80,
+    [string]$ProjectionMemory = "700m",
+    [decimal]$ProjectionCpu = 0.45,
+    [switch]$RecoveryChecks,
+    [switch]$RemoteOnly,
+    [ValidateRange(1,3)][int]$PerformanceRepeats = 1,
+    [string]$RetainedBackupPath = "",
+    [string]$ComparisonBaselineLocalImage = "",
     [decimal]$BudgetAmount = 25,
     [ValidateSet("correctness", "performance")]
     [string]$K6Profile = "correctness",
@@ -8,6 +25,14 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+if ($RemoteOnly -and !$RecoveryChecks) { throw 'RemoteOnly requires RecoveryChecks to execute on-host verification' }
+if ($PostgresStorageType -eq 'PremiumV2_LRS' -and $PostgresTier -eq 'Burstable') { throw 'Premium SSD v2 requires GeneralPurpose or MemoryOptimized compute' }
+if ($RetainedBackupPath -and (!(Test-Path -LiteralPath $RetainedBackupPath -PathType Leaf) -or !$RecoveryChecks -or $ComparisonBaselineLocalImage)) { throw 'RetainedBackupPath requires an existing backup and non-comparison RecoveryChecks' }
+if ($ComparisonBaselineLocalImage -and (!$RemoteOnly -or !$RecoveryChecks)) { throw 'ComparisonBaselineLocalImage requires RemoteOnly and RecoveryChecks' }
+if ($ComparisonBaselineLocalImage) {
+    & docker image inspect $ComparisonBaselineLocalImage --format '{{.Id}}' > $null
+    if ($LASTEXITCODE -ne 0) { throw 'The comparison baseline image must exist locally before provisioning Azure' }
+}
 
 $repo = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $stamp = Get-Date -Format "yyyyMMddHHmmss"
@@ -20,6 +45,20 @@ $tag = (git -C $repo rev-parse --short HEAD).Trim()
 if (!$EvidenceDirectory) { $EvidenceDirectory = Join-Path ([IO.Path]::GetTempPath()) "ledgerline-azure-$stamp" }
 $results = $EvidenceDirectory
 New-Item -ItemType Directory -Force -Path $results | Out-Null
+$sourcePatchPath = Join-Path $results 'source.patch'
+git -C $repo diff --binary "--output=$sourcePatchPath"
+if ($LASTEXITCODE -ne 0) { throw 'Source patch capture failed' }
+$sourceFiles = @(git -C $repo ls-files --cached --others --exclude-standard) | Where-Object {
+    $_ -match '^(ledger-service/src/|projection-service/src/|scripts/|deploy/|\.mvn/|pom\.xml$|mvnw(\.cmd)?$|ledger-service/pom\.xml$|projection-service/pom\.xml$|bench/k6-cloud-load\.js$)'
+}
+$sourceManifest = [ordered]@{}
+foreach ($file in $sourceFiles) {
+    $sourceManifest[$file] = (Get-FileHash -LiteralPath (Join-Path $repo $file) -Algorithm SHA256).Hash.ToLower()
+    $copyPath = Join-Path (Join-Path $results 'source-snapshot') $file
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $copyPath) | Out-Null
+    Copy-Item -LiteralPath (Join-Path $repo $file) -Destination $copyPath
+}
+$sourceManifest | ConvertTo-Json -Depth 4 | Set-Content -Encoding UTF8 (Join-Path $results 'source-manifest.json')
 $reviewerIp = (Invoke-RestMethod 'https://api.ipify.org').Trim()
 if ($reviewerIp -notmatch '^\d{1,3}(\.\d{1,3}){3}$') { throw 'Expected reviewer IPv4 address' }
 $sshTunnel = $null
@@ -77,6 +116,23 @@ $summary = [ordered]@{
     budgetAmountBillingCurrency = $BudgetAmount
     vmSize = $VmSize
     k6Profile = $K6Profile
+    postgresSku = $PostgresSku
+    postgresTier = $PostgresTier
+    postgresPerformanceTier = $PostgresPerformanceTier
+    postgresStorageType = $PostgresStorageType
+    ledgerCpu = $LedgerCpu
+    projectionCpu = $ProjectionCpu
+    recoveryChecks = [bool]$RecoveryChecks
+    remoteOnly = [bool]$RemoteOnly
+    comparisonBaselineLocalImage = $ComparisonBaselineLocalImage
+    performanceRepeats = $PerformanceRepeats
+    sourcePatchSha256 = (Get-FileHash -LiteralPath (Join-Path $results 'source.patch') -Algorithm SHA256).Hash.ToLower()
+    sourceManifestSha256 = (Get-FileHash -LiteralPath (Join-Path $results 'source-manifest.json') -Algorithm SHA256).Hash.ToLower()
+}
+if ($PostgresStorageType -eq 'PremiumV2_LRS') {
+    $summary.postgresPerformanceTier = $null
+    $summary.postgresStorageIops = $PostgresStorageIops
+    $summary.postgresStorageThroughput = $PostgresStorageThroughput
 }
 
 function Save-Summary {
@@ -134,6 +190,14 @@ function Wait-HttpHealth {
     throw "$Name did not become healthy at $Uri"
 }
 
+Save-Summary "building-local-images"
+try {
+    Invoke-DockerLogged -Arguments @('build', '-t', "ledgerline-ledger-preflight:$short", '-f', (Join-Path $repo 'deploy/Dockerfile.ledger'), $repo) -LogName '03-azure-docker-build-ledger.log' -FailureMessage 'ledger-service local build failed; no Azure resources provisioned'
+    Invoke-DockerLogged -Arguments @('build', '-t', "ledgerline-projection-preflight:$short", '-f', (Join-Path $repo 'deploy/Dockerfile.projection'), $repo) -LogName '03-azure-docker-build-projection.log' -FailureMessage 'projection-service local build failed; no Azure resources provisioned'
+} catch {
+    Save-Summary 'failed-before-provisioning'
+    throw
+}
 Save-Summary "creating-resource-group"
 
 try {
@@ -175,26 +239,41 @@ deletes that group in finally, then polls 'az group exists' until it returns fal
     Save-Summary "building-images"
     az acr login --name $acr | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-acr-login.log")
     if ($LASTEXITCODE -ne 0) { throw "ACR login failed" }
-    Invoke-DockerLogged -Arguments @("build", "-t", "$acrLoginServer/ledger-service:$tag", "-f", "deploy/Dockerfile.ledger", $repo) -LogName "03-azure-docker-build-ledger.log" -FailureMessage "ledger-service Docker build failed"
+    Invoke-DockerLogged -Arguments @('tag', "ledgerline-ledger-preflight:$short", "$acrLoginServer/ledger-service:$tag") -LogName '03-azure-docker-tag-ledger.log' -FailureMessage 'ledger-service image tagging failed'
     Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/ledger-service:$tag") -LogName "03-azure-docker-push-ledger.log" -FailureMessage "ledger-service Docker push failed"
-    Invoke-DockerLogged -Arguments @("build", "-t", "$acrLoginServer/projection-service:$tag", "-f", "deploy/Dockerfile.projection", $repo) -LogName "03-azure-docker-build-projection.log" -FailureMessage "projection-service Docker build failed"
+    Invoke-DockerLogged -Arguments @('tag', "ledgerline-projection-preflight:$short", "$acrLoginServer/projection-service:$tag") -LogName '03-azure-docker-tag-projection.log' -FailureMessage 'projection-service image tagging failed'
     Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/projection-service:$tag") -LogName "03-azure-docker-push-projection.log" -FailureMessage "projection-service Docker push failed"
+    if ($ComparisonBaselineLocalImage) {
+        Invoke-DockerLogged -Arguments @("tag", $ComparisonBaselineLocalImage, "$acrLoginServer/ledger-baseline:comparison") -LogName "03-baseline-tag.log" -FailureMessage "Baseline image tag failed"
+        Invoke-DockerLogged -Arguments @("push", "$acrLoginServer/ledger-baseline:comparison") -LogName "03-baseline-push.log" -FailureMessage "Baseline image push failed"
+    }
+
 
     Save-Summary "creating-postgres"
+    $storageArguments = @('--storage-type', $PostgresStorageType)
+    if ($PostgresStorageType -eq 'PremiumV2_LRS') {
+        $storageArguments += @('--iops', "$PostgresStorageIops", '--throughput', "$PostgresStorageThroughput")
+    } else {
+        $storageArguments += @('--performance-tier', $PostgresPerformanceTier)
+    }
     az postgres flexible-server create `
         --resource-group $rg `
         --name $pg `
         --location $Location `
         --admin-user ledgeradmin `
         --admin-password $dbPassword `
-        --sku-name Standard_B1ms `
-        --tier Burstable `
+        --sku-name $PostgresSku `
+        --tier $PostgresTier `
         --storage-size 32 `
+        @storageArguments `
         --version 16 `
         --public-access $reviewerIp `
         --yes `
         --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-postgres.json")
     Assert-LastExitCode "PostgreSQL server creation failed"
+    az postgres flexible-server show --resource-group $rg --name $pg --query '{id:id,availabilityZone:availabilityZone,sku:sku,storage:storage,version:version}' --output json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-postgres-configuration.json')
+    Assert-LastExitCode 'PostgreSQL configuration capture failed'
+    $summary.postgresResourceId = (Get-Content (Join-Path $results '03-azure-postgres-configuration.json') -Raw | ConvertFrom-Json).id
 
     az postgres flexible-server db create --resource-group $rg --server-name $pg --name ledgerline --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-postgres-db.json")
     Assert-LastExitCode "PostgreSQL database creation failed"
@@ -216,9 +295,9 @@ runcmd:
   - echo '$acrPass' | docker login $acrLoginServer -u $acrUser --password-stdin
   - docker run -d --name ledgerline-kafka --restart unless-stopped --network ledgerline --network-alias kafka --memory=900m --cpus=0.75 -e KAFKA_HEAP_OPTS='-Xms256m -Xmx256m' -e KAFKA_NODE_ID=1 -e KAFKA_PROCESS_ROLES=broker,controller -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092 -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@kafka:9093 -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 -e KAFKA_NUM_PARTITIONS=3 apache/kafka:3.8.0
   - sleep 60
-  - docker run -d --name ledgerline-ledger-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8080:8080 --memory=900m --cpus=0.80 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=12 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=4 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_PRODUCER_PROPERTIES_LINGER_MS=5 -e SPRING_KAFKA_PRODUCER_PROPERTIES_BATCH_SIZE=32768 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 -e LEDGER_OUTBOX_RELAY_BATCH_SIZE=100 $acrLoginServer/ledger-service:$tag
+  - docker run -d --name ledgerline-ledger-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8080:8080 --memory=$LedgerMemory --cpus=$LedgerCpu -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=40 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=12 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=4 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_PRODUCER_PROPERTIES_LINGER_MS=0 -e SPRING_KAFKA_PRODUCER_PROPERTIES_BATCH_SIZE=32768 -e JWT_SECRET='$jwtSecret' -e LEDGER_OUTBOX_RELAY_ENABLED=true -e LEDGER_OUTBOX_RELAY_DELAY_MS=200 -e LEDGER_OUTBOX_RELAY_BATCH_SIZE=100 $acrLoginServer/ledger-service:$tag
   - timeout 600 bash -c "until curl -fsS http://127.0.0.1:8080/actuator/health | grep -q UP; do sleep 5; done"
-  - docker run -d --name ledgerline-projection-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8081:8081 --memory=700m --cpus=0.45 -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=35 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=6 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_CONSUMER_PROPERTIES_MAX_POLL_RECORDS=100 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
+  - docker run -d --name ledgerline-projection-service --restart unless-stopped --network ledgerline -p 127.0.0.1:8081:8081 --memory=$ProjectionMemory --cpus=$ProjectionCpu -e JAVA_TOOL_OPTIONS='-XX:MaxRAMPercentage=70 -XX:InitialRAMPercentage=35 -XX:+ExitOnOutOfMemoryError' -e SPRING_DATASOURCE_URL='jdbc:postgresql://${pgHost}:5432/ledgerline?sslmode=require' -e SPRING_DATASOURCE_USERNAME=ledgeradmin -e SPRING_DATASOURCE_PASSWORD='$dbPassword' -e SPRING_DATASOURCE_HIKARI_MAXIMUM_POOL_SIZE=6 -e SPRING_DATASOURCE_HIKARI_MINIMUM_IDLE=2 -e SPRING_KAFKA_BOOTSTRAP_SERVERS=kafka:9092 -e SPRING_KAFKA_CONSUMER_PROPERTIES_MAX_POLL_RECORDS=100 -e JWT_SECRET='$jwtSecret' $acrLoginServer/projection-service:$tag
 "@
     $cloudInitPath = Join-Path ([IO.Path]::GetTempPath()) "ledgerline-cloud-init-$stamp.yaml"
     $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
@@ -247,57 +326,68 @@ runcmd:
     az postgres flexible-server firewall-rule create --resource-group $rg --server-name $pg --name DemoVmOnly --start-ip-address $ip --end-ip-address $ip --output none
     Assert-LastExitCode "VM PostgreSQL firewall rule failed"
     $sshArgs = @('-N', '-o', 'BatchMode=yes', '-o', 'ExitOnForwardFailure=yes', '-o', 'StrictHostKeyChecking=accept-new', '-o', 'ServerAliveInterval=15', '-L', '127.0.0.1:8080:127.0.0.1:8080', '-L', '127.0.0.1:8081:127.0.0.1:8081', "azureuser@$ip")
-    $sshTunnel = Start-Process ssh.exe -ArgumentList $sshArgs -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $results 'ssh-tunnel.log')
+    if (!$RemoteOnly) { $sshTunnel = Start-Process ssh.exe -ArgumentList $sshArgs -WindowStyle Hidden -PassThru -RedirectStandardError (Join-Path $results 'ssh-tunnel.log') }
     $summary.publicIp = $ip
     Save-Summary "waiting-for-health"
 
-    try {
-        Wait-HttpHealth -Name "Ledger service" -Uri "http://localhost:8080/actuator/health" -OutputName "03-azure-ledger-health.json"
-        Wait-HttpHealth -Name "Projection service" -Uri "http://localhost:8081/actuator/health" -OutputName "03-azure-projection-health.json"
-        Get-Content (Join-Path $results "03-azure-ledger-health.json") -Raw | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
-    } catch {
-        az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts "docker ps -a; docker logs --tail 200 ledgerline-ledger-service; docker logs --tail 100 ledgerline-kafka" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health-failure-logs.json")
-        throw
+    if (!$RemoteOnly) {
+        try {
+            Wait-HttpHealth -Name "Ledger service" -Uri "http://localhost:8080/actuator/health" -OutputName "03-azure-ledger-health.json"
+            Wait-HttpHealth -Name "Projection service" -Uri "http://localhost:8081/actuator/health" -OutputName "03-azure-projection-health.json"
+            Get-Content (Join-Path $results "03-azure-ledger-health.json") -Raw | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health.json")
+        } catch {
+            az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts "docker ps -a; docker logs --tail 200 ledgerline-ledger-service; docker logs --tail 100 ledgerline-kafka" --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-health-failure-logs.json")
+            throw
+        }
+
+        Save-Summary "running-smoke"
+        $env:ACCESS_TOKEN = $accessToken
+        & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-smoke.log")
+        if ($LASTEXITCODE -ne 0) { throw "Smoke test failed" }
+
+        $smokeText = Get-Content (Join-Path $results "03-azure-smoke.log") -Raw
+        $accountA = [regex]::Match($smokeText, "Created Account A: ([0-9a-fA-F-]+)").Groups[1].Value
+        $accountB = [regex]::Match($smokeText, "Created Account B: ([0-9a-fA-F-]+)").Groups[1].Value
+        if (-not $accountA -or -not $accountB) { throw "Could not parse account IDs from smoke log" }
+
+        $headers = @{ Authorization = "Bearer $accessToken"; 'Idempotency-Key' = "cloud-replay-$stamp" }
+        $body = @{ fromAccountId=$accountA; toAccountId=$accountB; amountMinor=1; currency='USD' } | ConvertTo-Json
+        $original = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
+        $replay = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
+        if ($original.transactionId -ne $replay.transactionId -or !$replay.idempotentReplay) { throw 'Cloud replay did not return original transaction' }
+        @{ replayReturnedOriginal=$true; transactionId=$original.transactionId } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-replay.json')
+
+        Save-Summary "running-k6"
+        $benchPath = (Join-Path $repo "bench").Replace("\", "/")
+        $evidenceMount = $results.Replace("\", "/")
+        $oldPreference = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        docker run --rm `
+            -e ACCESS_TOKEN="$accessToken" `
+            -e ACCOUNT_A="$accountA" `
+            -e ACCOUNT_B="$accountB" `
+            -e CLOUD_URL="http://host.docker.internal:8080/api/v1" `
+            -e K6_PROFILE="$K6Profile" `
+            -v "${benchPath}:/bench:ro" `
+            -v "${evidenceMount}:/evidence" `
+            grafana/k6 run /bench/k6-cloud-load.js --summary-export=/evidence/03-azure-k6-summary.json 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-k6.log")
+        $summary.k6ExitCode = $LASTEXITCODE
+        $ErrorActionPreference = $oldPreference
+        if ($summary.k6ExitCode -ne 0) { throw "Cloud k6 correctness thresholds failed" }
+        # Exercise account creation and replay again on the same populated broker/database.
+        & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-reused-smoke.log")
+        Assert-LastExitCode 'Cloud reused-stack smoke failed'
+        Save-Summary "querying-invariants"
+
+    } else {
+        Save-Summary "waiting-for-remote-health"
+        $healthProbe = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'verify-cloud-health.py')))
+        $healthCommand = "set -e; printf '%s' '$healthProbe' | base64 -d > /tmp/verify-cloud-health.py; sudo python3 /tmp/verify-cloud-health.py"
+        az vm run-command invoke --resource-group $rg --name $vm --command-id RunShellScript --scripts $healthCommand --output json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-remote-health.json')
+        Assert-LastExitCode 'On-host cloud health invocation failed'
+        $healthResult = Get-Content (Join-Path $results '03-azure-remote-health.json') -Raw | ConvertFrom-Json
+        if (($healthResult.value.message -join "`n") -notmatch '"result": "PASS"') { throw 'On-host cloud health checks did not pass' }
     }
-
-    Save-Summary "running-smoke"
-    $env:ACCESS_TOKEN = $accessToken
-    & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-smoke.log")
-    if ($LASTEXITCODE -ne 0) { throw "Smoke test failed" }
-
-    $smokeText = Get-Content (Join-Path $results "03-azure-smoke.log") -Raw
-    $accountA = [regex]::Match($smokeText, "Created Account A: ([0-9a-fA-F-]+)").Groups[1].Value
-    $accountB = [regex]::Match($smokeText, "Created Account B: ([0-9a-fA-F-]+)").Groups[1].Value
-    if (-not $accountA -or -not $accountB) { throw "Could not parse account IDs from smoke log" }
-
-    $headers = @{ Authorization = "Bearer $accessToken"; 'Idempotency-Key' = "cloud-replay-$stamp" }
-    $body = @{ fromAccountId=$accountA; toAccountId=$accountB; amountMinor=1; currency='USD' } | ConvertTo-Json
-    $original = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
-    $replay = Invoke-RestMethod -Method Post -Uri 'http://localhost:8080/api/v1/transfers' -Headers $headers -ContentType 'application/json' -Body $body
-    if ($original.transactionId -ne $replay.transactionId -or !$replay.idempotentReplay) { throw 'Cloud replay did not return original transaction' }
-    @{ replayReturnedOriginal=$true; transactionId=$original.transactionId } | ConvertTo-Json | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-replay.json')
-
-    Save-Summary "running-k6"
-    $benchPath = (Join-Path $repo "bench").Replace("\", "/")
-    $evidenceMount = $results.Replace("\", "/")
-    $oldPreference = $ErrorActionPreference
-    $ErrorActionPreference = "Continue"
-    docker run --rm `
-        -e ACCESS_TOKEN="$accessToken" `
-        -e ACCOUNT_A="$accountA" `
-        -e ACCOUNT_B="$accountB" `
-        -e CLOUD_URL="http://host.docker.internal:8080/api/v1" `
-        -e K6_PROFILE="$K6Profile" `
-        -v "${benchPath}:/bench:ro" `
-        -v "${evidenceMount}:/evidence" `
-        grafana/k6 run /bench/k6-cloud-load.js --summary-export=/evidence/03-azure-k6-summary.json 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-k6.log")
-    $summary.k6ExitCode = $LASTEXITCODE
-    $ErrorActionPreference = $oldPreference
-    if ($summary.k6ExitCode -ne 0) { throw "Cloud k6 correctness thresholds failed" }
-    # Exercise account creation and replay again on the same populated broker/database.
-    & "C:\msys64\usr\bin\bash.exe" "bench/smoke-test.sh" "http://localhost:8080" "http://localhost:8081" 2>&1 | Tee-Object -FilePath (Join-Path $results "03-azure-reused-smoke.log")
-    Assert-LastExitCode 'Cloud reused-stack smoke failed'
-    Save-Summary "querying-invariants"
 
     $probe = [Convert]::ToBase64String([IO.File]::ReadAllBytes((Join-Path $PSScriptRoot 'verify-cloud-api.py')))
     $probeCommand = "set -e; printf '%s' '$probe' | base64 -d > /tmp/verify-cloud-api.py; sudo python3 /tmp/verify-cloud-api.py"
@@ -357,6 +447,15 @@ SELECT 'CLOUD_SQL_ASSERTIONS_PASSED' AS verification;
     }
     if (($remoteResult.value.message -join "`n") -notmatch 'CLOUD_SQL_ASSERTIONS_PASSED') { throw 'Remote SQL assertion completion was not observed' }
 
+    if ($RecoveryChecks) {
+        Save-Summary "running-recovery-checks"
+        if ($ComparisonBaselineLocalImage) {
+            & (Join-Path $PSScriptRoot 'compare-cloud-transfers.ps1') -PublicIp $ip -EvidenceDirectory $results -ResourceGroup $rg -BaselineImage "$acrLoginServer/ledger-baseline:comparison" -OptimizedImage "$acrLoginServer/ledger-service:$tag"
+        } else {
+            & (Join-Path $PSScriptRoot 'verify-cloud-recovery.ps1') -PublicIp $ip -EvidenceDirectory $results -PerformanceRepeats $PerformanceRepeats -RetainedBackupPath $RetainedBackupPath
+        }
+    }
+
     Save-Summary "recording-cost"
     try {
         az consumption usage list --start-date $today.ToString("yyyy-MM-dd") --end-date $today.AddDays(1).ToString("yyyy-MM-dd") --output json | Set-Content -Encoding UTF8 (Join-Path $results "03-azure-usage.json")
@@ -376,6 +475,13 @@ finally {
     $env:ACCESS_TOKEN = $oldAccessToken
     if ($sshTunnel -and !$sshTunnel.HasExited) { Stop-Process -Id $sshTunnel.Id }
     if ($cloudInitPath -and (Test-Path -LiteralPath $cloudInitPath)) { Remove-Item -LiteralPath $cloudInitPath -Force }
+    if ($summary.postgresResourceId) {
+        try {
+            az monitor metrics list --resource $summary.postgresResourceId --metrics cpu_percent memory_percent disk_iops_consumed_percentage --aggregation Average Maximum --interval 1m --start-time $summary.startedAtUtc --output json 2> (Join-Path $results '03-azure-metrics-errors.txt') | Set-Content -Encoding UTF8 (Join-Path $results '03-azure-postgres-metrics.json')
+        } catch {
+            'Optional Azure metric collection failed; acceptance and cleanup remain independent.' | Set-Content (Join-Path $results '03-azure-metrics-status.txt')
+        }
+    }
     Save-Summary "destroying-resource-group"
     try {
         az group delete --name $rg --yes --no-wait

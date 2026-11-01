@@ -1,0 +1,1062 @@
+{
+  "date": "2026-10-26",
+  "result": "PASS_WITH_LIMITS",
+  "target": {
+    "p95_ms": 545.56289645,
+    "duration_seconds": 150,
+    "transfers": 32018
+  },
+  "local_tests": {
+    "projection": 15,
+    "errors": 0,
+    "failures": 0,
+    "skipped": 0,
+    "ledger": 49
+  },
+  "phases": [
+    {
+      "postgres_performance_tier": "P4",
+      "events": [
+        {
+          "check": "correctness",
+          "profile": "correctness",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 10176,
+            "rate": 101.73154655419889
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 10176,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "max": 524.904017,
+            "p(90)": 201.2249515,
+            "p(95)": 228.10799225,
+            "p(99)": 295.85138,
+            "avg": 95.35365146501579,
+            "min": 14.214944,
+            "med": 71.674442,
+            "thresholds": {
+              "p(99)<3000": false,
+              "p(95)<1500": false
+            }
+          },
+          "requests": {
+            "count": 10176,
+            "rate": 101.73154655419889
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "correctness",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 62319,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 1806655,
+            "temp_bytes": 0,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "correctness",
+          "passed": true,
+          "observed_seconds": 0.076,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance",
+          "profile": "performance",
+          "threshold_exit_code": 99,
+          "transfers": {
+            "count": 15135,
+            "rate": 100.89866347007002
+          },
+          "failed_requests": {
+            "fails": 15135,
+            "passes": 0,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "p(99)": 2566.185452499994,
+            "avg": 400.6963670329697,
+            "min": 13.793758,
+            "med": 252.57373,
+            "max": 6354.100814,
+            "p(90)": 918.9287766000001,
+            "p(95)": 1312.8596486999995,
+            "thresholds": {
+              "p(95)<750": true,
+              "p(99)<1500": true
+            }
+          },
+          "requests": {
+            "rate": 100.89866347007002,
+            "count": 15135
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 151748,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 5063861,
+            "temp_bytes": 0,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance",
+          "passed": true,
+          "observed_seconds": 13.094,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance-repeat-2",
+          "profile": "performance",
+          "threshold_exit_code": 99,
+          "transfers": {
+            "count": 15972,
+            "rate": 106.46395258693093
+          },
+          "failed_requests": {
+            "fails": 15972,
+            "passes": 0,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "med": 263.551612,
+            "max": 5962.677093,
+            "p(90)": 822.3154335999999,
+            "p(95)": 1156.7606833999998,
+            "p(99)": 2065.395613069997,
+            "avg": 378.87568104501554,
+            "min": 13.749024,
+            "thresholds": {
+              "p(95)<750": true,
+              "p(99)<1500": true
+            }
+          },
+          "requests": {
+            "count": 15972,
+            "rate": 106.46395258693093
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance-repeat-2",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 247812,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 8219199,
+            "temp_bytes": 15729524,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance-repeat-2",
+          "passed": true,
+          "observed_seconds": 15.28,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "projection_restart",
+          "transfers_while_stopped": 20,
+          "recovery_seconds": 20.624
+        },
+        {
+          "check": "broker_restart",
+          "transfers_while_stopped": 20,
+          "durable_pending_events": 20,
+          "recovery_seconds": 8.953
+        },
+        {
+          "check": "ledger_restart_replay",
+          "recovery_seconds": 9.095,
+          "original_transaction_returned": true,
+          "posting_count_unchanged": true
+        },
+        {
+          "check": "duplicate_event",
+          "committed_offset_advanced": true,
+          "statement_rows_unchanged": true,
+          "processed_event_count_unchanged": true
+        },
+        {
+          "check": "backup_restore",
+          "mode": "quiesced logical backup into separate database",
+          "dump_seconds": 9.276,
+          "restore_seconds": 3.779,
+          "backup_bytes": 12131719,
+          "matching_table_fingerprints": 11,
+          "postings": 82656
+        },
+        {
+          "check": "retained_backup_restore",
+          "postings": 103578,
+          "matching_table_fingerprints": 11,
+          "retained_backup_sha256": "7ada3caeef242c97835c33b32974e972c8a667174d890f7bfea25030fc1e65a3",
+          "scope": "Original retained backup restored on Azure, then independently dumped/restored; not the deleted historical live source"
+        }
+      ],
+      "raw_receipt_sha256": {
+        "backup-fingerprints.json": "cbf734267aef8c9cec20f2bd7ffcb695fb642bc99ee27d09d110478e3b2fa45c",
+        "backup.dump": "e9731990db5e081b8486ab7c2a758abf0145ea5dbae584afb75df0c78b29b010",
+        "correctness.json": "938f2438b8893d5951bc6824b3a50d37073ba00f6490b707e09056f48c739c80",
+        "correctness.log": "814a7e0c6028541fe92bc3a1c2177936a345272cfabd3fa6d9fecbe57dc51400",
+        "database-roundtrip-timing.txt": "58e3bcc94d1bb2e19256cdd87168e643116fe3518c9f552365f8ef2fa2dfef7f",
+        "final-invariants.txt": "b85323b3eb5a6679a3ffec9afe6d370f54a4bbc310782073d32268771d73f72a",
+        "performance-repeat-2.json": "1f47426c5dcac313ab70461460ef266ba5df30bfec70ddcfe94dae073986f7d7",
+        "performance-repeat-2.log": "d261cd5f4bc36541f51a3a3db99fe5a0f4ce55f4c1f0270f58d79a8db8c449d7",
+        "performance.json": "a432a3e0d3a428bbee87ef408b233aeab5c664171c343e423234e640843e7d48",
+        "performance.log": "25c0df3026e568a762d79956878a3ee052d60a0f10107fff0b65ff8b2aeac6fd",
+        "report.json": "c77d3c1cf2892ca125e3616e901b956d96307a77fe696dc1d400e734a66e7d8f",
+        "resource-samples-correctness.jsonl": "8de9c2e884e0332732b6dade58c9ee4708239306e84cbbd51722fdaef6b3d0ff",
+        "resource-samples-performance-repeat-2.jsonl": "fc308cae754f3a22a69b2aac952e97fd4b326cdb6bd1cd7cc4fb58a4fbb65904",
+        "resource-samples-performance.jsonl": "5ff5500e57093236ab827223878788e6c01b55f42821db29072f7beab03329c6",
+        "retained-fingerprints.json": "06fd11331947c53a429ca67c31e79075198b20215693f8f1aceba0263ad48eae",
+        "retained-roundtrip.dump": "65d9a68c193818e6c4e35e71078adeb04378f975eca027943d5a03ea14ce6dba"
+      },
+      "name": "projection_function_P4",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "probe_sha256": "f1cd27c15b7e0a1304c12653505635650025a4c6f765df7ae62abcf6f5fc34ca",
+      "cleanup_confirmed": true,
+      "postgres_iops": 120,
+      "result": "RECOVERY_PASS_LOAD_THRESHOLD_FAILED",
+      "source_manifest_sha256": "5aeacad63c7a527a4aae62ceeefa0872cd1eab653f6bc264fe79c9c0da78ba0a"
+    },
+    {
+      "name": "journal_batching_P15",
+      "result": "RECOVERY_PASS_LOAD_THRESHOLD_FAILED",
+      "postgres_performance_tier": "P15",
+      "postgres_iops": 1100,
+      "source_manifest_sha256": "c82745b06fd127ea95309e5fe14db20f287a628789bdcf892139cc44cb70b97f",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "probe_sha256": "f1cd27c15b7e0a1304c12653505635650025a4c6f765df7ae62abcf6f5fc34ca",
+      "events": [
+        {
+          "check": "correctness",
+          "profile": "correctness",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 25783,
+            "rate": 257.7853340378527
+          },
+          "failed_requests": {
+            "fails": 25783,
+            "passes": 0,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "med": 13.666083,
+            "max": 676.767988,
+            "p(90)": 53.411330799999995,
+            "p(95)": 82.0349186999999,
+            "p(99)": 186.01509142000006,
+            "avg": 25.12430025563353,
+            "min": 3.508928,
+            "thresholds": {
+              "p(95)<1500": false,
+              "p(99)<3000": false
+            }
+          },
+          "requests": {
+            "count": 25783,
+            "rate": 257.7853340378527
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "correctness",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 142037,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 3959944,
+            "temp_bytes": 0,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "correctness",
+          "passed": true,
+          "observed_seconds": 106.498,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 42010,
+            "rate": 280.01495202498097
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 42010,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "avg": 130.65687592075753,
+            "min": 3.493772,
+            "med": 69.9186675,
+            "max": 2087.358626,
+            "p(90)": 325.4514666,
+            "p(95)": 460.5615854499998,
+            "p(99)": 809.3110864099996,
+            "thresholds": {
+              "p(95)<750": false,
+              "p(99)<1500": false
+            }
+          },
+          "requests": {
+            "count": 42010,
+            "rate": 280.01495202498097
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 383799,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 13015884,
+            "temp_bytes": 16012260,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance",
+          "passed": false,
+          "deadline_seconds": 180,
+          "ledger_rows": 135594,
+          "projection_rows": 133358,
+          "pending_events": 1186
+        },
+        {
+          "check": "additional_settling",
+          "case": "performance",
+          "observed_seconds": 14.333,
+          "original_gate_passed": false
+        },
+        {
+          "check": "performance-repeat-2",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 28816,
+            "rate": 192.08754594195304
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 28816,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "avg": 200.14211854906839,
+            "min": 4.201943,
+            "med": 127.1619115,
+            "max": 5556.982059,
+            "p(90)": 464.27243999999996,
+            "p(95)": 644.8813115,
+            "p(99)": 1129.96884665,
+            "thresholds": {
+              "p(95)<750": false,
+              "p(99)<1500": false
+            }
+          },
+          "requests": {
+            "count": 28816,
+            "rate": 192.08754594195304
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance-repeat-2",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 561369,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 159062955,
+            "temp_bytes": 67394536,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance-repeat-2",
+          "passed": false,
+          "deadline_seconds": 180,
+          "ledger_rows": 193226,
+          "projection_rows": 177382,
+          "pending_events": 0
+        },
+        {
+          "check": "additional_settling",
+          "case": "performance-repeat-2",
+          "observed_seconds": 121.795,
+          "original_gate_passed": false
+        },
+        {
+          "check": "projection_restart",
+          "transfers_while_stopped": 20,
+          "recovery_seconds": 20.659
+        },
+        {
+          "check": "broker_restart",
+          "transfers_while_stopped": 20,
+          "durable_pending_events": 20,
+          "recovery_seconds": 9.322
+        },
+        {
+          "check": "ledger_restart_replay",
+          "recovery_seconds": 9.194,
+          "original_transaction_returned": true,
+          "posting_count_unchanged": true
+        },
+        {
+          "check": "duplicate_event",
+          "committed_offset_advanced": true,
+          "statement_rows_unchanged": true,
+          "processed_event_count_unchanged": true
+        },
+        {
+          "check": "backup_restore",
+          "mode": "quiesced logical backup into separate database",
+          "dump_seconds": 11.342,
+          "restore_seconds": 5.761,
+          "backup_bytes": 28394754,
+          "matching_table_fingerprints": 11,
+          "postings": 193308
+        },
+        {
+          "check": "retained_backup_restore",
+          "postings": 103578,
+          "matching_table_fingerprints": 11,
+          "retained_backup_sha256": "7ada3caeef242c97835c33b32974e972c8a667174d890f7bfea25030fc1e65a3",
+          "scope": "Original retained backup restored on Azure, then independently dumped/restored; not the deleted historical live source"
+        }
+      ],
+      "relay_configuration_change": {
+        "changed": true,
+        "original_gate_passed": false,
+        "applied_between_timed_profiles": true,
+        "producer_linger_ms_before": 5,
+        "producer_linger_ms_after": 0,
+        "image": "sha256:ebeab7a51252affa298d33c4d3c51f1dd689365416618ea8aa95a29c859ddaf7",
+        "change_started_epoch": 1793025138.727601,
+        "restart_completed_epoch": 1793025139.8603992
+      },
+      "raw_receipt_sha256": {
+        "backup-fingerprints.json": "23bc8635f28bcd84f4023ae4c64b98f56238db5a504a3d73ecdbf407c21dab5d",
+        "backup.dump": "1d811f79910bdc2bafe891a2b210906d0017f1e63c03984abdf9ef1456ecbd04",
+        "correctness.json": "ddd0d876ea3ed325919da74ba2d9c8f8ddea487564f7075f1a86a4804ca05c80",
+        "correctness.log": "c05f46329a4f3fc227467af4d4a753606bcda5b70dda53139a987b63bca160d5",
+        "database-roundtrip-timing.txt": "0e6fd052acc34c1293c5baf5cf12b84f755ab18cd500deaf5387146050b99405",
+        "final-invariants.txt": "c5f3341841e7534a08e73fbccf6a9171cc31d201b8ce9e63132f9a5a3ad06814",
+        "performance-repeat-2.json": "b7ff6c6531d0f398315c110ad43be3b52c4c2b4c8fb593504afba6b51829ee8e",
+        "performance-repeat-2.log": "fb0da973c99771890bd5c3b0bc69008c4672bdf472fe5d98fd40086f9af476d9",
+        "performance.json": "3aefb470e70b07ead114e008a2684beb6b8860cc59c4d8e4dbb32e35dfa414fc",
+        "performance.log": "fcb69ec557df49636892bd3f3fff2ae3bd1a2ab1d3145cf0f6af98913330c731",
+        "relay-tuning-source.py": "8dd7712a5e927e7c429212ff49a34c649960b4ac7fd9fb91cc3c51b37f087764",
+        "relay-tuning.json": "3e08071d8548a3d6be9532f8a23e8b3bac1e2a22ad478e8cc41bac4ab670f4ea",
+        "report.json": "03f8cdd947eabfd2b2fca0fbc65aca7e315deb191aebff422b748cc91df1c6b0",
+        "resource-samples-correctness.jsonl": "30ebbe217ab1a66414051e28865686c6d4bfe0da15164473ccdfa6a5a937200c",
+        "resource-samples-performance-repeat-2.jsonl": "f983ca95173d320a8db69ffa7ee87a76bf14bb3d3c1c3f6bbfcc713042190fc8",
+        "resource-samples-performance.jsonl": "eeb239732cc997edf5fba766206a2874b014e7e132f3a19de2843eafed9123d0",
+        "retained-fingerprints.json": "06fd11331947c53a429ca67c31e79075198b20215693f8f1aceba0263ad48eae",
+        "retained-roundtrip.dump": "794eb3004ba9067f0ba8dc76fd3ab16fb092fc4696101057c7cd09c1a51677cc"
+      },
+      "cleanup_confirmed": true
+    },
+    {
+      "name": "batch_projection_P15_linger0",
+      "result": "PASS",
+      "requested_performance_target_met": false,
+      "postgres_storage_type": "Premium_LRS",
+      "postgres_performance_tier": "P15",
+      "postgres_iops": 1100,
+      "source_manifest_sha256": "154004e2fdf15a7c4f26014149b55f05617ac3ebeba343f95051748199f59102",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "probe_sha256": "f1cd27c15b7e0a1304c12653505635650025a4c6f765df7ae62abcf6f5fc34ca",
+      "events": [
+        {
+          "check": "correctness",
+          "profile": "correctness",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 16197,
+            "rate": 161.9620281544717
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 16197,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "max": 332.57641,
+            "p(90)": 98.58790739999999,
+            "p(95)": 111.0285682,
+            "p(99)": 142.91237279999987,
+            "avg": 52.23001749521508,
+            "min": 10.324025,
+            "med": 43.502899,
+            "thresholds": {
+              "p(95)<1500": false,
+              "p(99)<3000": false
+            }
+          },
+          "requests": {
+            "rate": 161.9620281544717,
+            "count": 16197
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "correctness",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 86868,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 3060134,
+            "temp_bytes": 0,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "correctness",
+          "passed": true,
+          "observed_seconds": 0.059,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 25899,
+            "rate": 172.64870171127419
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 25899,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "p(99)": 1223.2941960800001,
+            "avg": 225.20389088868453,
+            "min": 10.323765,
+            "med": 151.814234,
+            "max": 3661.647794,
+            "p(90)": 492.1179858,
+            "p(95)": 672.2997655999999,
+            "thresholds": {
+              "p(99)<1500": false,
+              "p(95)<750": false
+            }
+          },
+          "requests": {
+            "count": 25899,
+            "rate": 172.64870171127419
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 222491,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 8519506,
+            "temp_bytes": 5767484,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance",
+          "passed": true,
+          "observed_seconds": 0.088,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance-repeat-2",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 26012,
+            "rate": 173.40159506610473
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 26012,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "p(95)": 678.9590699499996,
+            "p(99)": 1181.07615715,
+            "avg": 224.00856357473353,
+            "min": 10.334763,
+            "med": 149.521278,
+            "max": 4163.332252,
+            "p(90)": 487.71675760000005,
+            "thresholds": {
+              "p(95)<750": false,
+              "p(99)<1500": false
+            }
+          },
+          "requests": {
+            "count": 26012,
+            "rate": 173.40159506610473
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance-repeat-2",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 358684,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 14243786,
+            "temp_bytes": 31912516,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance-repeat-2",
+          "passed": true,
+          "observed_seconds": 0.076,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "projection_restart",
+          "transfers_while_stopped": 20,
+          "recovery_seconds": 16.083
+        },
+        {
+          "check": "broker_restart",
+          "transfers_while_stopped": 20,
+          "durable_pending_events": 20,
+          "recovery_seconds": 7.842
+        },
+        {
+          "check": "ledger_restart_replay",
+          "recovery_seconds": 7.904,
+          "original_transaction_returned": true,
+          "posting_count_unchanged": true
+        },
+        {
+          "check": "duplicate_event",
+          "committed_offset_advanced": true,
+          "statement_rows_unchanged": true,
+          "processed_event_count_unchanged": true
+        },
+        {
+          "check": "backup_restore",
+          "mode": "quiesced logical backup into separate database",
+          "dump_seconds": 9.266,
+          "restore_seconds": 5.86,
+          "backup_bytes": 19931966,
+          "matching_table_fingerprints": 11,
+          "postings": 136306
+        },
+        {
+          "check": "retained_backup_restore",
+          "postings": 103578,
+          "matching_table_fingerprints": 11,
+          "retained_backup_sha256": "7ada3caeef242c97835c33b32974e972c8a667174d890f7bfea25030fc1e65a3",
+          "scope": "Original retained backup restored on Azure, then independently dumped/restored; not the deleted historical live source"
+        }
+      ],
+      "load_count_reconciliation": {
+        "result": "PASS",
+        "successful_load_responses": 68108,
+        "database_counts": {
+          "transactions": 68108,
+          "distinct_keys": 68108,
+          "postings": 136216,
+          "outbox_events": 68108,
+          "audit_rows": 68108
+        },
+        "source_sha256": "9fea4e71c0bcfe8d75f2467723ceb13944698a6a5994c8dc0a67906ee0e900de"
+      },
+      "raw_receipt_sha256": {
+        "backup-fingerprints.json": "faf78cd399e8eb0b87c8ed169f6f7c365a7e5efaf655781f3dcfe6a31f846813",
+        "backup.dump": "602bc5a05b911225dc2f706564fc9afc900a9105f9d6cdea54beae58bedeef5f",
+        "correctness.json": "173618b9b2c1fdb007c576fabd3969311591240f659157670427fb97316b169c",
+        "correctness.log": "83341ab6b0b55733a5e5004aefaa36cdd1593caf8754027d8ce215064b937faf",
+        "database-roundtrip-timing.txt": "625cc7f158dff7747d71c81cfa63bb4fba7ce3ad0aabad0aed18637c73b5938d",
+        "final-invariants.txt": "ec2caba52acb0fcfcffc8a0286788587bb63e77e3663779e8946a2aeb106e940",
+        "load-count-reconciliation-source.py": "9fea4e71c0bcfe8d75f2467723ceb13944698a6a5994c8dc0a67906ee0e900de",
+        "load-count-reconciliation.json": "7c97c59abcda2cfb497b3d2cc850ff473b9652c5c0917427a7174f28c250adf8",
+        "performance-repeat-2.json": "61393ad0709048f185dd6d575bd66519020b657de50968c4430f4edff951a5cc",
+        "performance-repeat-2.log": "ba4f9b4d42b53cce4b29586ac357956ebde1e96f20703a25ae08b7d056c04b0a",
+        "performance.json": "5af5ac90c302f6572c19661ce1163a801a8d4f2527414fd10c46ff430e788384",
+        "performance.log": "d62c56aea47b80e2751df40b915a4c027b82ad526b010e3cc683c87d8bfe15e0",
+        "report.json": "daa73a5a959e0b7c6381823334beeb137cd3970cc13616adc47fd6e93a0c8620",
+        "resource-samples-correctness.jsonl": "33824fceb8964e983a3d5315bd8ce179a2c591f704ec4afaa97d2ecddad8eb6c",
+        "resource-samples-performance-repeat-2.jsonl": "fd93c949b3b6e558674350282c29efc633de019d61aa399a8d161de9a80cf1d4",
+        "resource-samples-performance.jsonl": "f7068d48d67c7e4288bf2080a7e971239d0619c7453030362a1972d2fe92786a",
+        "retained-fingerprints.json": "06fd11331947c53a429ca67c31e79075198b20215693f8f1aceba0263ad48eae",
+        "retained-roundtrip.dump": "c6525d06979c37339becbda2e3fc6bebc1a985be9fa84457aa7161f719951170"
+      },
+      "cleanup_confirmed": true
+    },
+    {
+      "name": "batch_projection_SSDv2",
+      "result": "PASS",
+      "requested_performance_target_met_both_runs": true,
+      "recovery_timing_improved_vs_original": false,
+      "postgres_storage": {
+        "autoGrow": "Disabled",
+        "iops": 3000,
+        "storageSizeGb": 32,
+        "throughput": 125,
+        "tier": null,
+        "type": "PremiumV2_LRS"
+      },
+      "application_sources_match_previous_phase": true,
+      "source_manifest_sha256": "d2ee8570fbac417510820e54de5c35c28cb8c803c9d57c7825ab61926e824cf3",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "probe_sha256": "f1cd27c15b7e0a1304c12653505635650025a4c6f765df7ae62abcf6f5fc34ca",
+      "events": [
+        {
+          "check": "correctness",
+          "profile": "correctness",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 28882,
+            "rate": 288.8093044470499
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 28882,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "p(99)": 114.89506279,
+            "avg": 20.211700160065124,
+            "min": 3.698152,
+            "med": 11.4711875,
+            "max": 463.336734,
+            "p(90)": 46.020480700000014,
+            "p(95)": 64.87583699999995,
+            "thresholds": {
+              "p(95)<1500": false,
+              "p(99)<3000": false
+            }
+          },
+          "requests": {
+            "count": 28882,
+            "rate": 288.8093044470499
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "correctness",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 152982,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 5373453,
+            "temp_bytes": 0,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "correctness",
+          "passed": true,
+          "observed_seconds": 0.075,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 48427,
+            "rate": 322.82561402898625
+          },
+          "failed_requests": {
+            "fails": 48427,
+            "passes": 0,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "max": 1783.717309,
+            "p(90)": 263.14649760000003,
+            "p(95)": 362.0051561999996,
+            "p(99)": 628.21894428,
+            "avg": 110.56025675602437,
+            "min": 3.533923,
+            "med": 65.489871,
+            "thresholds": {
+              "p(95)<750": false,
+              "p(99)<1500": false
+            }
+          },
+          "requests": {
+            "count": 48427,
+            "rate": 322.82561402898625
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 404366,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 15759439,
+            "temp_bytes": 17934664,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance",
+          "passed": true,
+          "observed_seconds": 12.634,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "performance-repeat-2",
+          "profile": "performance",
+          "threshold_exit_code": 0,
+          "transfers": {
+            "count": 49472,
+            "rate": 329.8029951615468
+          },
+          "failed_requests": {
+            "passes": 0,
+            "fails": 49472,
+            "thresholds": {
+              "rate<0.01": false
+            },
+            "value": 0
+          },
+          "latency": {
+            "avg": 107.8001889688108,
+            "min": 3.514503,
+            "med": 66.59149149999999,
+            "max": 2021.959015,
+            "p(90)": 251.5014143,
+            "p(95)": 341.10788269999995,
+            "p(99)": 593.7699113500005,
+            "thresholds": {
+              "p(95)<750": false,
+              "p(99)<1500": false
+            }
+          },
+          "requests": {
+            "count": 49472,
+            "rate": 329.8029951615468
+          },
+          "generator": "same VM, separate 0.5 CPU container",
+          "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e"
+        },
+        {
+          "check": "database_statistics",
+          "case": "performance-repeat-2",
+          "values": {
+            "numbackends": 16,
+            "xact_commit": 662189,
+            "xact_rollback": 1,
+            "blks_read": 25,
+            "blks_hit": 27337016,
+            "temp_bytes": 76538452,
+            "deadlocks": 0,
+            "blk_read_time": 0,
+            "blk_write_time": 0
+          }
+        },
+        {
+          "check": "load_catchup",
+          "case": "performance-repeat-2",
+          "passed": true,
+          "observed_seconds": 14.745,
+          "deadline_seconds": 180
+        },
+        {
+          "check": "projection_restart",
+          "transfers_while_stopped": 20,
+          "recovery_seconds": 20.469
+        },
+        {
+          "check": "broker_restart",
+          "transfers_while_stopped": 20,
+          "durable_pending_events": 20,
+          "recovery_seconds": 9.333
+        },
+        {
+          "check": "ledger_restart_replay",
+          "recovery_seconds": 9.179,
+          "original_transaction_returned": true,
+          "posting_count_unchanged": true
+        },
+        {
+          "check": "duplicate_event",
+          "committed_offset_advanced": true,
+          "statement_rows_unchanged": true,
+          "processed_event_count_unchanged": true
+        },
+        {
+          "check": "backup_restore",
+          "mode": "quiesced logical backup into separate database",
+          "dump_seconds": 11.968,
+          "restore_seconds": 7.306,
+          "backup_bytes": 36838262,
+          "matching_table_fingerprints": 11,
+          "postings": 253652
+        },
+        {
+          "check": "retained_backup_restore",
+          "postings": 103578,
+          "matching_table_fingerprints": 11,
+          "retained_backup_sha256": "7ada3caeef242c97835c33b32974e972c8a667174d890f7bfea25030fc1e65a3",
+          "scope": "Original retained backup restored on Azure, then independently dumped/restored; not the deleted historical live source"
+        }
+      ],
+      "load_count_reconciliation": {
+        "result": "PASS",
+        "successful_load_responses": 126781,
+        "database_counts": {
+          "transactions": 126781,
+          "distinct_keys": 126781,
+          "postings": 253562,
+          "outbox_events": 126781,
+          "audit_rows": 126781
+        },
+        "source_sha256": "9fea4e71c0bcfe8d75f2467723ceb13944698a6a5994c8dc0a67906ee0e900de"
+      },
+      "raw_receipt_sha256": {
+        "backup-fingerprints.json": "d7e0c040086f6cfd3ffc2aa83a2da305050f945a449bd968fab8be2d9032dc8c",
+        "backup.dump": "7f8c5dd6ce6d7c0e4dfeb190da8aa7d2d4853f0f27726b6dc8ad2d65c5c9c03c",
+        "correctness.json": "34f8f2e5fa45314cb7c1fcdfc7e4c4fc67cd2f1bf0e1df6899bb83eb11db1bdb",
+        "correctness.log": "a2068df12aa8ab571f8d9f462a3e5724d222fb46eb2a608fb1329586c60916ef",
+        "database-roundtrip-timing.txt": "89f2289bed9a3806dd1e9244550366cc09896f86fd179b91fdc78f2ed0385d88",
+        "final-invariants.txt": "881c3ee1d2ff84af733ff55f0eeff176af4835045eb26fa5903b61cacbff7481",
+        "load-count-reconciliation-source.py": "9fea4e71c0bcfe8d75f2467723ceb13944698a6a5994c8dc0a67906ee0e900de",
+        "load-count-reconciliation.json": "8cb0ffe7240783cc43500e4eda1ef15199d260aab628a1297d0386291b0af0a2",
+        "performance-repeat-2.json": "90d9b8ab1d22f556d8fb1a10c9e8291a6f26fefb345dc84ab37f831a9f6555d8",
+        "performance-repeat-2.log": "9d9a8b8caeeb4f4530973c869c5bcec2b5c7bb3c74c6bc664c6bce004c7d1357",
+        "performance.json": "eb810a06a113096f116bd17ce09767cc53928d86fd4b5107d458b2ce936e5248",
+        "performance.log": "68f677a792f4968cac98cec7221cbae8593e636f86b2f8f1de466371d464227b",
+        "report.json": "b0ead19b54ec31ce6ea2e9e1e2867c09160da39bb81b47795feffbf7719ee5f7",
+        "resource-samples-correctness.jsonl": "116a0105a02cc2cf6b1325958ac65b2461b91451926a0b87182ecbe1c08800ad",
+        "resource-samples-performance-repeat-2.jsonl": "dbb8f5207e173c5c0eb93012fe2cac19cb45a0f0bc67f3d049afeea532da418a",
+        "resource-samples-performance.jsonl": "55509cf2c9437c13cf1fd712028366d505afb672f81a6746964e1ba697160a04",
+        "retained-fingerprints.json": "06fd11331947c53a429ca67c31e79075198b20215693f8f1aceba0263ad48eae",
+        "retained-roundtrip.dump": "675f4c183ca998b8c1bf61d9d47e9153da22e3ff3c5189e6a71689001da69304"
+      },
+      "cleanup_confirmed": true
+    }
+  ],
+  "limits": [
+    "Final throughput/latency targets passed on different storage from the original run.",
+    "Final observed recovery times are slightly above the original single-run timings; no recovery-speed improvement is claimed.",
+    "Bounded synthetic Azure acceptance, not sustained production capacity or disaster-recovery RTO/RPO."
+  ]
+}

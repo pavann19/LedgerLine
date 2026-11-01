@@ -32,15 +32,15 @@ public class TransferEventConsumer {
 
     @KafkaListener(
         topics = "${projection.kafka.transfers-topic:ledger.transfers.v1}",
-        groupId = "${spring.kafka.consumer.group-id:ledgerline-projection}"
+        groupId = "${spring.kafka.consumer.group-id:ledgerline-projection}", batch = "true"
     )
-    public void onMessage(ConsumerRecord<String, String> record, Acknowledgment ack) {
+    public void onMessages(java.util.List<ConsumerRecord<String, String>> records, Acknowledgment ack) {
         try {
-            TransferEventPayload payload = objectMapper.readValue(record.value(), TransferEventPayload.class);
-            log.info("Received event for projection: eventId={}, tx={}", payload.eventId(), payload.transactionId());
+            var payloads = new java.util.ArrayList<TransferEventPayload>(records.size());
+            for (var record : records) payloads.add(objectMapper.readValue(record.value(), TransferEventPayload.class));
 
             // 1. Process and commit in DB transaction
-            projectionService.projectTransfer(payload);
+            projectionService.projectBatch(payloads);
 
             // 2. Failure test hook
             if (simulateCrashBeforeOffsetCommit) {
@@ -53,8 +53,9 @@ public class TransferEventConsumer {
                 ack.acknowledge();
             }
         } catch (Exception e) {
-            log.error("Error processing projection event from Kafka: {}", e.getMessage(), e);
-            throw new RuntimeException("Failed processing projection event", e);
+            // Exception messages can contain raw records; telemetry contains no payload.
+            log.error("Projection batch failed; records={}, failureClass={}", records.size(), e.getClass().getSimpleName());
+            throw new RuntimeException("Failed processing projection batch: " + e.getClass().getSimpleName());
         }
     }
 }

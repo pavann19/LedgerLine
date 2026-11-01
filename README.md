@@ -1,5 +1,7 @@
 # LedgerLine
 
+[Documentation index](docs/README.md) | [Verified baseline and remaining limits](docs/VERIFICATION.md)
+
 LedgerLine is a Java 21 / Spring Boot 4.0 financial-backend demonstration. It records same-currency account transfers as signed integer minor-unit postings in PostgreSQL, then publishes a transactional outbox to Kafka for asynchronous statements and daily summaries.
 
 It is a portfolio implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
@@ -24,7 +26,7 @@ powershell -ExecutionPolicy Bypass -File scripts/local-demo.ps1
 
 The script generates a random signing secret and short-lived local tokens, creates accounts, performs funding and customer transfers, checks replay and projection results, and writes a git-ignored summary containing tokens. Cold image builds can take longer than five minutes. The evaluator and post-load reused-stack check were verified locally on 2026-10-24; see the evidence boundaries below.
 
-For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `docker compose -f deploy/compose.yaml up --build -d`. Both services are HS256 resource servers; an external trusted issuer must supply `sub`, `exp`, and `roles`. Customer projection access additionally requires signed `accounts` claims. This repository does not provide login, password storage, refresh tokens, or revocation.
+For manual Compose use, set `JWT_SECRET` to at least 32 random bytes and run `docker compose -f deploy/compose.yaml up --build -d`. Both services default to local HS256 JWT validation. Optional OAuth2 provider mode validates RS256 access tokens with issuer and audience checks; trusted issuers must supply `sub`, `exp`, and `roles`. Customer projection access additionally requires signed `accounts` claims. This repository does not provide login, password storage, refresh tokens, or revocation.
 
 ## Test
 
@@ -36,11 +38,15 @@ Integration, concurrency, property, and Kafka failure tests require real Docker 
 
 ## Documentation
 
-The temporary Azure verification on 2026-10-24 passed 5,235 transfers with zero HTTP failures, live API probes, and financial/projection SQL assertions. Its resources were deleted after verification. See [cloud evidence and limits](docs/EVIDENCE.md#temporary-azure-verification); a continuously hosted demo is not provided.
+The temporary Boot 4 Azure validation on 2026-10-25 passed 51,744 load transfers with zero HTTP failures across the existing 20/100-VU profiles. The 100-VU profile measured 213 transfers/s and 546 ms p95; recovery, duplicate-event and 103,578-posting backup/restore checks passed. Resources were deleted. See [measured cloud results and limits](docs/AZURE_BOOT4_VALIDATION.md); a continuously hosted demo is not provided.
+
+The transfer-query optimization removes four PostgreSQL statements per fresh transfer using the safe strategies and passes 59 regression tests. Its repeated Azure performance validation failed and did not complete (latency thresholds and projection catch-up); no stable percentage gain is claimed. See [optimization results and retained limits](docs/TRANSFER_QUERY_OPTIMIZATION.md).
 
 - [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)
+- [OAuth2, OpenAPI and rate limiting](docs/API_SECURITY.md)
+- [Recovery and reconciliation interfaces](docs/RECOVERY_AND_RECONCILIATION.md)
 - [Financial invariants](docs/FINANCIAL_INVARIANTS.md)
 - [API usage](docs/api-examples.md)
 - [Database and deployment](docs/DATABASE_DEPLOYMENT.md)
@@ -50,3 +56,20 @@ The temporary Azure verification on 2026-10-24 passed 5,235 transfers with zero 
 - [Isolation experiment method](docs/experiments/01-isolation.md)
 
 The database user in local Compose has administrative privileges. Direct SQL can alter balances without postings, append to old transactions, disable triggers, or truncate history. SQL administrators and Kafka publishers are trusted. Projection data is eventually consistent and is never the balance authority. No guarantee of exactly-once end-to-end processing, uninterrupted delivery, deadlock elimination across all strategies, or safe internet deployment is made.
+
+The [hosted Java 21 reactor](https://github.com/pavann19/LedgerLine/actions/runs/41318940329)
+passed 106 tests for runtime revision `43c8a0c` on 1 November 2026, together with
+the history scan and both image/SBOM/vulnerability gates. The separate
+[worker checks](https://github.com/pavann19/LedgerLine/actions/runs/41318940317)
+also passed. Each later PR must pass its own checks. The original two-account
+latency gate remains failed; a separate many-account workload cannot replace it.
+See the recovery guide for migration and rollback limits.
+
+## License
+
+Original project code is licensed under [Apache-2.0](LICENSE). Dependency licenses
+and distribution obligations are retained in [third-party notices](THIRD_PARTY_NOTICES.txt).
+
+## Contributing and maintenance
+
+See [contributing](CONTRIBUTING.md), [maintenance rules](MAINTAINING.md) and [security reporting](SECURITY.md). Changes reach `main` through reviewed PRs and required checks.

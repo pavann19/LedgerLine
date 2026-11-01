@@ -1,0 +1,208 @@
+{
+  "date": "2026-10-26",
+  "implementation_correctness": "PASS",
+  "cloud_performance_validation": "FAILED_INCOMPLETE",
+  "baseline_application_commit": "2c57cb3d4197f3eab50162551195a29353aa69a6",
+  "optimized_application_commit": "c53b8a28883409739ed1433acd37d3526f20d915",
+  "repeat_probe_commit": "b724c2efae711c80144f7f97e611d780ff4cbfa8",
+  "baseline_application_identical_to_public_commit": "02ae50196ea21256bae1173fbd65494d5dc7167e",
+  "database_statements_removed_per_fresh_transfer": 4,
+  "java21_linux_tests": {
+    "tests": 59,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "image_policy_checks_passed": 5,
+  "images": {
+    "baseline": "sha256:30ee2787e838526b14e5a9402c20d3524b6c947e48f95294d771aaf0541f9498",
+    "optimized": "sha256:f1c01929e00a1f622de7b62e38b59b50e552e0b43e6e22b9b027dced25847557"
+  },
+  "projection_image": "sha256:028aef55e7aae75c64b9018af70ece2399f24e7571301373052d12fbc50e367b",
+  "same_runtime_base_layers_and_image_environment": true,
+  "exact_image_scan": {
+    "scanner": "Trivy 0.74.0",
+    "severity": [
+      "HIGH",
+      "CRITICAL"
+    ],
+    "ignore_unfixed": true,
+    "findings": 0,
+    "exceptions": 0
+  },
+  "environment": {
+    "region": "centralindia",
+    "vm": "Standard_D4ls_v6",
+    "postgres": "Standard_D2ds_v5",
+    "postgres_version": "16",
+    "postgres_storage_gib": 32,
+    "ledger_cpu": 1.75,
+    "ledger_memory_mib": 2048,
+    "projection_cpu": 0.75,
+    "projection_memory_mib": 1400,
+    "kafka_cpu": 0.75,
+    "kafka_memory_mib": 900,
+    "same_host_generator_cpu": 0.5,
+    "profile_duration_seconds": 150,
+    "target_peak_vus": 100
+  },
+  "experiments": [
+    {
+      "name": "initial",
+      "result": "INCOMPLETE_FAILED_CONTROL",
+      "storage_tier": "P4",
+      "provisioned_iops": 120,
+      "planned_order": [
+        "baseline",
+        "optimized",
+        "optimized",
+        "baseline",
+        "baseline",
+        "optimized"
+      ],
+      "completed_load_cases": 4,
+      "seed_fingerprint": "b416ee662f141aec1e77660020437193c879aa1175c235392671b0ae8d2fadb9",
+      "probe_sha256": "8ef7770247bcb05120857ec1537a94a5179f509efbcf336df543772046871b5b",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e",
+      "scratch_database_cleanup": false,
+      "cases": [
+        {
+          "case": "01-baseline",
+          "variant": "baseline",
+          "successful_transfers": 31204,
+          "transfers_per_second": 208.02431466748945,
+          "p95_ms": 538.195126699999,
+          "p99_ms": 943.2275170400027,
+          "http_failure_rate": 0,
+          "latency_thresholds": "PASS",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": 107.73,
+          "post_load_sql_invariants": "PASS",
+          "failure_state": null
+        },
+        {
+          "case": "02-optimized",
+          "variant": "optimized",
+          "successful_transfers": 34597,
+          "transfers_per_second": 230.62864237405464,
+          "p95_ms": 487.0158221999993,
+          "p99_ms": 816.1004579600008,
+          "http_failure_rate": 0,
+          "latency_thresholds": "PASS",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": 130.99,
+          "post_load_sql_invariants": "PASS",
+          "failure_state": null
+        },
+        {
+          "case": "03-optimized",
+          "variant": "optimized",
+          "successful_transfers": 32947,
+          "transfers_per_second": 219.62305802981686,
+          "p95_ms": 510.87307209999994,
+          "p99_ms": 872.383290420001,
+          "http_failure_rate": 0,
+          "latency_thresholds": "PASS",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": 118.366,
+          "post_load_sql_invariants": "PASS",
+          "failure_state": null
+        },
+        {
+          "case": "04-baseline",
+          "variant": "baseline",
+          "successful_transfers": 22076,
+          "transfers_per_second": 147.14111790089862,
+          "p95_ms": 848.0848599999999,
+          "p99_ms": 1421.29206275,
+          "http_failure_rate": 0,
+          "latency_thresholds": "FAIL",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": null,
+          "post_load_sql_invariants": "NOT_REACHED_CATCHUP_TIMEOUT",
+          "failure_state": null
+        }
+      ],
+      "canonical_lf_probe_sha256": "8ef7770247bcb05120857ec1537a94a5179f509efbcf336df543772046871b5b"
+    },
+    {
+      "name": "repeat",
+      "result": "VALIDATION_FAILED",
+      "storage_tier": "P15",
+      "provisioned_iops": 1100,
+      "planned_order": [
+        "baseline",
+        "optimized",
+        "optimized",
+        "baseline",
+        "baseline",
+        "optimized"
+      ],
+      "completed_load_cases": 2,
+      "seed_fingerprint": "99cb84cf449f3998f477e81e2c7b456a49f86660ff6c0d9eb589384ea5ae6763",
+      "probe_sha256": "27ced5c886293c7eb8a6a95302ae7c7487b36cbbcca7b9ab9934611203129067",
+      "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+      "generator_image": "sha256:3e4186aea62e11a45560bfc51e19eeafe82fc07ce069c78aff44b7ff893d9a5e",
+      "scratch_database_cleanup": true,
+      "cases": [
+        {
+          "case": "01-baseline",
+          "variant": "baseline",
+          "successful_transfers": 10709,
+          "transfers_per_second": 71.38048685815272,
+          "p95_ms": 1794.8945018000004,
+          "p99_ms": 3022.7111608800005,
+          "http_failure_rate": 0,
+          "latency_thresholds": "FAIL",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": 100.138,
+          "post_load_sql_invariants": "PASS",
+          "failure_state": null
+        },
+        {
+          "case": "02-optimized",
+          "variant": "optimized",
+          "successful_transfers": 12173,
+          "transfers_per_second": 81.15053086412937,
+          "p95_ms": 1540.5933292,
+          "p99_ms": 2574.7034036000023,
+          "http_failure_rate": 0,
+          "latency_thresholds": "FAIL",
+          "catchup_deadline_seconds": 180,
+          "catchup_observed_seconds": null,
+          "post_load_sql_invariants": "NOT_REACHED_CATCHUP_TIMEOUT",
+          "failure_state": {
+            "postings": 24354,
+            "statement_rows": 18268,
+            "unpublished_outbox": 0,
+            "processed_events": 9134
+          }
+        }
+      ],
+      "canonical_lf_probe_sha256": "01c298f5ab2f4eadbed34184e3fd8319e01940814e57a0c1479ee145af790a95"
+    }
+  ],
+  "successful_load_transfers": 143706,
+  "limits": [
+    "Neither planned six-case experiment completed; no combined median or percentage improvement is claimed.",
+    "The two experiments use different storage settings and seed datasets; their absolute results are not a code-only before/after comparison.",
+    "Four post-load SQL validations passed; two were not reached after projection catch-up timed out.",
+    "The observed projection backlog does not prove a monetary invariant violation; full validation was not reached.",
+    "Initial Azure metrics showed storage pressure; the repeat remained slower and its root cause was not established.",
+    "No further cloud experiment was run after the user selected completion with measured limits."
+  ],
+  "cloud_cleanup": {
+    "confirmed_absent": true,
+    "verified_at_utc": "2026-10-26T02:58:18.495350+00:00",
+    "resource_groups": [
+      "ledgerline-evidence-20261026070957",
+      "ledgerline-evidence-20261026075721"
+    ],
+    "verification": "az group exists returned false for both groups",
+    "temporary_registry_credentials_removed": true
+  },
+  "probe_hash_note": "Raw probe hashes describe uploaded bytes; canonical LF hashes match Git source after Windows CRLF normalization.",
+  "statement_reduction_scope": "Fresh transfers using the default pessimistic strategy and the other safe strategies; replay and intentionally broken negative-control paths are excluded.",
+  "canonical_lf_workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940"
+}

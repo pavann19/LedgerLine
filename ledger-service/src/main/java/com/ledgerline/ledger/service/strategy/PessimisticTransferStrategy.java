@@ -68,9 +68,10 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                 UUID firstLockId = fromFirst ? fromId : toId;
                 UUID secondLockId = fromFirst ? toId : fromId;
 
-                AccountBalance firstBalance = balanceRepository.findByIdForUpdate(firstLockId)
+                var lockedBalances = balanceRepository.findPairForUpdate(firstLockId, secondLockId);
+                AccountBalance firstBalance = lockedBalances.stream().filter(b -> b.accountId().equals(firstLockId)).findFirst()
                     .orElseThrow(() -> new AccountNotFoundException(firstLockId));
-                AccountBalance secondBalance = balanceRepository.findByIdForUpdate(secondLockId)
+                AccountBalance secondBalance = lockedBalances.stream().filter(b -> b.accountId().equals(secondLockId)).findFirst()
                     .orElseThrow(() -> new AccountNotFoundException(secondLockId));
 
                 // A duplicate may have committed while this request waited for the locks.
@@ -102,14 +103,12 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                 );
 
                 // Update cached balances
-                balanceRepository.updateBalance(new AccountBalance(
+                balanceRepository.updatePair(new AccountBalance(
                     fromId,
                     Math.subtractExact(fromBalance.balanceMinor(), request.amountMinor()),
                     fromBalance.accountType(),
                     fromBalance.version() + 1
-                ));
-
-                balanceRepository.updateBalance(new AccountBalance(
+                ), new AccountBalance(
                     toId,
                     Math.addExact(toBalance.balanceMinor(), request.amountMinor()),
                     toBalance.accountType(),

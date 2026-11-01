@@ -29,6 +29,8 @@ class TransferStrategyRegressionTest {
         when(balances.findById(to)).thenReturn(Optional.of(new AccountBalance(to, Long.MAX_VALUE, AccountType.OVERDRAFT, 0)));
         when(balances.findByIdForUpdate(from)).thenReturn(Optional.of(new AccountBalance(from, 0, AccountType.OVERDRAFT, 0)));
         when(balances.findByIdForUpdate(to)).thenReturn(Optional.of(new AccountBalance(to, Long.MAX_VALUE, AccountType.OVERDRAFT, 0)));
+        when(balances.findPairForUpdate(from,to)).thenReturn(List.of(
+            new AccountBalance(from,0,AccountType.OVERDRAFT,0),new AccountBalance(to,Long.MAX_VALUE,AccountType.OVERDRAFT,0)));
         when(balances.updateBalanceOptimistic(any(), anyLong(), anyLong())).thenReturn(1);
         TransferExecutionStrategy strategy = switch (variant) {
             case VARIANT_1_PESSIMISTIC -> new PessimisticTransferStrategy(support, balances, manager);
@@ -52,9 +54,12 @@ class TransferStrategyRegressionTest {
         when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.empty(), Optional.empty(), Optional.of(original));
         when(balances.findByIdForUpdate(from)).thenReturn(Optional.of(new AccountBalance(from, 0, AccountType.CUSTOMER, 1)));
         when(balances.findByIdForUpdate(to)).thenReturn(Optional.of(new AccountBalance(to, 1, AccountType.CUSTOMER, 1)));
+        when(balances.findPairForUpdate(from,to)).thenReturn(List.of(
+            new AccountBalance(from,0,AccountType.CUSTOMER,1),new AccountBalance(to,1,AccountType.CUSTOMER,1)));
         assertSame(original, new PessimisticTransferStrategy(support, balances, manager)
             .execute("key", new TransferRequest(from, to, 1, "USD"), new byte[32]));
         verify(support, never()).recordTransactionAndPostings(any(), anyString(), any(), any(), any());
         verify(balances, never()).updateBalance(any());
+        verify(balances, never()).updatePair(any(),any());
     }
 }

@@ -1,5 +1,13 @@
 # Database and deployment
 
+## Current recovery migrations
+
+Ledger V5 adds the reconciliation view. Projection V3 introduces transactional posting projection, V4 batch projection, V5 durable quarantine, and V6 reconciliation/correlation support. Review each service's Flyway scripts before upgrading. Preserve applied migration checksums. These are forward migrations, not a supplied downgrade path; the V1–V4 discussion below describes the earlier financial-schema foundation.
+
+Use operator-managed PostgreSQL backups and verify recovery on an isolated copy. A worker SQLite backup is not a financial database backup. Application rollback does not undo schema changes: verify the exact older binary against the retained schema first.
+
+The reconciliation endpoint is disabled by default and requires a separately configured read-only identity; see [recovery and reconciliation](RECOVERY_AND_RECONCILIATION.md). Do not substitute application writer credentials. The optional worker owns its queue and reports; it is not a monetary scheduler.
+
 PostgreSQL 16 persists accounts, balance rows, transaction headers, signed postings, outbox, and audit history. UUIDs identify accounts/transactions; BIGSERIAL identifies postings/outbox/audit; TIMESTAMPTZ stores timestamps; money uses BIGINT. Projection stores processed event IDs, statement rows, and UTC summaries. Local services share a database with separate Flyway history tables.
 
 V1 creates tables, FKs, indexes, and nonnegative balances. V2 adds deferred zero-sum and posting immutability. V3 adds ownership and principal-scoped uniqueness, assigning old rows LEGACY_SYSTEM. V4 adds enum/type/currency consistency, nonzero/unique postings per transaction-account, single-currency zero-sum, and header/audit immutability. V1-V3 remain unchanged. V4 fails on invalid existing data rather than repairing or deleting it. Back up and inspect existing databases; fresh/upgrade execution requires database-backed verification.

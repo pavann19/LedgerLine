@@ -11,8 +11,7 @@ import com.ledgerline.ledger.exception.AccountNotFoundException;
 import com.ledgerline.ledger.exception.IdempotencyConflictException;
 import com.ledgerline.ledger.exception.InvalidTransferException;
 import com.ledgerline.ledger.repository.AccountRepository;
-import com.ledgerline.ledger.repository.AuditLogRepository;
-import com.ledgerline.ledger.repository.OutboxRepository;
+import com.ledgerline.ledger.repository.TransferWriteRepository;
 import com.ledgerline.ledger.repository.PostingRepository;
 import com.ledgerline.ledger.repository.TransactionRepository;
 import org.springframework.stereotype.Component;
@@ -20,7 +19,9 @@ import com.ledgerline.ledger.security.CurrentPrincipal;
 
 import java.time.Instant;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -30,8 +31,7 @@ public class TransferCoreSupport {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final PostingRepository postingRepository;
-    private final OutboxRepository outboxRepository;
-    private final AuditLogRepository auditLogRepository;
+    private final TransferWriteRepository transferWriteRepository;
     private final ObjectMapper objectMapper;
     private final CurrentPrincipal currentPrincipal;
 
@@ -39,40 +39,48 @@ public class TransferCoreSupport {
         AccountRepository accountRepository,
         TransactionRepository transactionRepository,
         PostingRepository postingRepository,
-        OutboxRepository outboxRepository,
-        AuditLogRepository auditLogRepository,
+        TransferWriteRepository transferWriteRepository,
         ObjectMapper objectMapper,
         CurrentPrincipal currentPrincipal
     ) {
         this.accountRepository = accountRepository;
         this.transactionRepository = transactionRepository;
         this.postingRepository = postingRepository;
-        this.outboxRepository = outboxRepository;
-        this.auditLogRepository = auditLogRepository;
+        this.transferWriteRepository = transferWriteRepository;
         this.objectMapper = objectMapper;
         this.currentPrincipal = currentPrincipal;
     }
 
     public void validateLockedTransferRequest(TransferRequest request) {
+        Map<UUID, Account> lockedAccounts = new HashMap<>();
         java.util.stream.Stream.of(request.fromAccountId(), request.toAccountId()).distinct().sorted()
-            .forEach(id -> accountRepository.findByIdForShare(id)
-                .orElseThrow(() -> new AccountNotFoundException(id)));
-        validateTransferRequest(request);
+            .forEach(id -> lockedAccounts.put(id, accountRepository.findByIdForShare(id)
+                .orElseThrow(() -> new AccountNotFoundException(id))));
+        validateTransferShape(request);
+        validateAccounts(request, lockedAccounts.get(request.fromAccountId()),
+            lockedAccounts.get(request.toAccountId()));
     }
 
     public void validateTransferRequest(TransferRequest request) {
+        validateTransferShape(request);
+
+        Account fromAccount = accountRepository.findById(request.fromAccountId())
+            .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
+        Account toAccount = accountRepository.findById(request.toAccountId())
+            .orElseThrow(() -> new AccountNotFoundException(request.toAccountId()));
+        validateAccounts(request, fromAccount, toAccount);
+    }
+
+    private void validateTransferShape(TransferRequest request) {
         if (request.fromAccountId().equals(request.toAccountId())) {
             throw new InvalidTransferException("Source and destination accounts must be distinct");
         }
         if (request.amountMinor() <= 0) {
             throw new InvalidTransferException("Transfer amount must be strictly positive");
         }
+    }
 
-        Account fromAccount = accountRepository.findById(request.fromAccountId())
-            .orElseThrow(() -> new AccountNotFoundException(request.fromAccountId()));
-        Account toAccount = accountRepository.findById(request.toAccountId())
-            .orElseThrow(() -> new AccountNotFoundException(request.toAccountId()));
-
+    private void validateAccounts(TransferRequest request, Account fromAccount, Account toAccount) {
         if (fromAccount.status() != AccountStatus.ACTIVE) {
             throw new InvalidTransferException("Source account is not ACTIVE: " + fromAccount.status());
         }
@@ -126,75 +134,23 @@ public class TransferCoreSupport {
         TransferRequest request,
         Instant now
     ) {
-        // 1. Insert Transaction
-        Transaction tx = new Transaction(
-            transactionId,
-            idempotencyKey,
-            requestHash,
-            TransactionStatus.POSTED,
-            now
-        );
-        transactionRepository.insertTransaction(tx);
-
-        // 2. Insert Balanced Double-Entry Postings (Zero-Sum Invariant: -amount + amount = 0)
         String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
-        Posting debitPosting = new Posting(
-            null,
-            transactionId,
-            request.fromAccountId(),
-            -request.amountMinor(),
-            currency,
-            now
-        );
-        Posting creditPosting = new Posting(
-            null,
-            transactionId,
-            request.toAccountId(),
-            request.amountMinor(),
-            currency,
-            now
-        );
-        postingRepository.insertPosting(debitPosting);
-        postingRepository.insertPosting(creditPosting);
-
-        // 3. Insert Outbox Event for Async Kafka Relay
-        UUID eventId = UUID.randomUUID();
-        TransferEventPayload payload = new TransferEventPayload(
-            eventId,
-            transactionId,
-            request.fromAccountId(),
-            request.toAccountId(),
-            request.amountMinor(),
-            currency,
-            now
-        );
+        var payload = new TransferEventPayload(UUID.randomUUID(), transactionId, request.fromAccountId(),
+            request.toAccountId(), request.amountMinor(), currency, now,
+            java.util.Optional.ofNullable(org.slf4j.MDC.get("request_id")).orElse(transactionId.toString()));
+        String payloadJson;
         try {
-            String payloadJson = objectMapper.writeValueAsString(payload);
-            outboxRepository.insertEvent(new OutboxEvent(
-                null,
-                transactionId,
-                "TransferPosted",
-                payloadJson,
-                now,
-                null
-            ));
+            payloadJson = objectMapper.writeValueAsString(payload);
         } catch (JacksonException e) {
             throw new IllegalStateException("Failed to serialize outbox event payload", e);
         }
+        String details = String.format("{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%d,\"currency\":\"%s\"}",
+            request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency);
+        List<Posting> persistedPostings = transferWriteRepository.insert(transactionId, idempotencyKey,
+            requestHash, request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency,
+            now, payloadJson, currentPrincipal.id(), details);
 
-        // 4. Insert Audit Log
-        auditLogRepository.insertLog(new AuditLogEntry(
-            null,
-            currentPrincipal.id(),
-            "TRANSFER_POSTED",
-            transactionId.toString(),
-            now,
-            String.format("{\"from\":\"%s\",\"to\":\"%s\",\"amount\":%d,\"currency\":\"%s\"}",
-                request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency)
-        ));
-
-        // 5. Query created postings with their generated IDs
-        List<Posting> persistedPostings = postingRepository.findByTransactionId(transactionId);
+        // 5. Return the stored IDs and timestamp precision from INSERT ... RETURNING.
         List<PostingDto> postingDtos = persistedPostings.stream()
             .map(p -> new PostingDto(p.id(), p.accountId(), p.amountMinor(), p.currency(), p.createdAt()))
             .toList();

@@ -1,0 +1,83 @@
+{
+  "date": "2026-10-26",
+  "result": "FAIL",
+  "source_snapshot": "7e68624bb3a683e261152142a7b3830c7c2a94fe",
+  "application_source_commit": "02ae50196ea21256bae1173fbd65494d5dc7167e",
+  "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+  "generator_image_matches_original": true,
+  "profiles": [
+    {
+      "profile": "correctness",
+      "duration_seconds": 100,
+      "successful_transfers": 6568,
+      "average_transfers_per_second": 65.6469286889586,
+      "http_failures": 0,
+      "p95_ms": 499.1988759499996,
+      "p99_ms": 1000.6746285099997,
+      "k6_exit_code": 0,
+      "post_load_reconciliation": "PASS"
+    },
+    {
+      "profile": "performance",
+      "duration_seconds": 150,
+      "successful_transfers": 9575,
+      "average_transfers_per_second": 63.8251760009811,
+      "http_failures": 0,
+      "p95_ms": 2223.1387099,
+      "p99_ms": 3987.2476202400007,
+      "k6_exit_code": 99,
+      "post_load_projection_catchup": "FAIL: exceeded original 180-second deadline"
+    }
+  ],
+  "post_performance_diagnostic": {
+    "ledger_rows": 32294,
+    "projection_rows": 29216,
+    "unpublished_outbox_events": 0,
+    "scope": "single diagnostic observation, not final reconciliation"
+  },
+  "fresh_cloud_checks_not_reached": [
+    "projection outage",
+    "Kafka outage",
+    "ledger restart replay",
+    "duplicate Kafka event consumption",
+    "cloud backup/restore",
+    "final post-failure reconciliation"
+  ],
+  "retained_receipt_hashes": {
+    "checked": 9,
+    "matched": 9
+  },
+  "retained_backup_fresh_local_restore": {
+    "result": "PASS",
+    "postings": 103578,
+    "matching_roundtrip_table_fingerprints": 11,
+    "full_original_sql_assertions_passed_on_both_databases": true,
+    "original_live_source_fingerprints_retained": false,
+    "scope": "Original backup restored locally; fresh dump/restore roundtrip compared all 11 tables. Not a fresh comparison against the deleted original Azure database."
+  },
+  "focused_local_regressions": {
+    "source_snapshot": "7e68624bb3a683e261152142a7b3830c7c2a94fe",
+    "runtime": "Linux Java 21, disposable PostgreSQL/Kafka Testcontainers",
+    "idempotency_tests": 4,
+    "async_failure_and_resilience_tests": 3,
+    "projection_deduplication_tests": 6,
+    "total": 13,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "scope": "Local component/integration checks; not the skipped Azure outage and duplicate-consumption acceptance"
+  },
+  "resource_group_cleanup_confirmed": true,
+  "initial_build_attempt_cleanup_confirmed": true,
+  "raw_receipt_sha256": {
+    "correctness.json": "4e51fec2958f34543a9cfc940541be44bb73868fedf4024ac4026ebc725a1d58",
+    "correctness.log": "0534a6160132cbaf043771c17a06172debea1ec3550d91a34adbecf8ad73ddc1",
+    "performance.json": "361769ffccd559047ea326b90bf37726b537afd798dbda1c25bd3768970ff005",
+    "performance.log": "ec0c2f1451196cb107aa5367416993defb9163f80457e08829a3c263d0ce2df1",
+    "report.json": "2f112242be829097001876878dcb0dc7e280b32d00b7415400f126baa0648bc4",
+    "resource-samples-correctness.jsonl": "acb3cb3e3ec503f69d5968973e4aaa3a49c7a2633ac598c900db08fefff2aee4",
+    "resource-samples-performance.jsonl": "42126f5ea781006b559a3ff16b50a0862e89b7981ab5bc0dc148d650adf7d9ee",
+    "focused-regressions.log": "7cb45afe6b23fe4e9deb292d98de92dd60b468c140608780898e58a822845e2d",
+    "retained-restore-result.json": "708ba5e0724e62a7381e503026cb7988186d72f64b772f444ba50c18886e97c5"
+  }
+}

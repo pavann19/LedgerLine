@@ -6,6 +6,7 @@ import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.stereotype.Repository;
 
 import java.sql.Timestamp;
+import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 
@@ -41,6 +42,22 @@ public class PostingRepository {
                 Timestamp.from(posting.createdAt())
             )
             .update();
+    }
+
+    public List<Posting> insertPairReturning(Posting debit, Posting credit) {
+        String sql = """
+            INSERT INTO postings (transaction_id, account_id, amount_minor, currency, created_at)
+            VALUES (?, ?, ?, ?, ?), (?, ?, ?, ?, ?)
+            RETURNING id, transaction_id, account_id, amount_minor, currency, created_at
+            """;
+        return jdbcClient.sql(sql)
+            .params(debit.transactionId(), debit.accountId(), debit.amountMinor(), debit.currency(),
+                Timestamp.from(debit.createdAt()), credit.transactionId(), credit.accountId(),
+                credit.amountMinor(), credit.currency(), Timestamp.from(credit.createdAt()))
+            .query(rowMapper).list().stream()
+            // Match replay's ORDER BY id without relying on RETURNING row order.
+            .sorted(Comparator.comparing(Posting::id))
+            .toList();
     }
 
     public List<Posting> findByAccountId(UUID accountId, int limit, int offset) {

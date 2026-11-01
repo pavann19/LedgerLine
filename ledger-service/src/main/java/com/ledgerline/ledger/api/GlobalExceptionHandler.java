@@ -38,6 +38,11 @@ public class GlobalExceptionHandler {
     ResponseEntity<ProblemDetail> malformed(Exception e, HttpServletRequest r) {
         return problem(HttpStatus.BAD_REQUEST, "invalid-request", "Invalid request", "Malformed or missing request parameters", r, null);
     }
+    @ExceptionHandler({org.springframework.web.servlet.resource.NoResourceFoundException.class,
+        org.springframework.web.servlet.NoHandlerFoundException.class})
+    ResponseEntity<ProblemDetail> missingRoute(Exception e, HttpServletRequest r) {
+        return problem(HttpStatus.NOT_FOUND, "not-found", "Not found", "The requested resource does not exist", r, null);
+    }
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> general(Exception e, HttpServletRequest r) { return problem(HttpStatus.INTERNAL_SERVER_ERROR,"internal-error","Internal server error","The request could not be completed",r,null); }
     private ResponseEntity<ProblemDetail> problem(HttpStatus s,String type,String title,String detail,HttpServletRequest r,Map<String,String> errors){

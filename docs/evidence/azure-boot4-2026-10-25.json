@@ -1,0 +1,105 @@
+{
+  "date": "2026-10-25",
+  "result": "PASS",
+  "application_source_commit": "02ae50196ea21256bae1173fbd65494d5dc7167e",
+  "image_build_commit": "7e68624bb3a683e261152142a7b3830c7c2a94fe",
+  "workload_sha256": "25014a70f50150782d44b0e92e11a1cb44b756f8579dcbbfe646278b7edec940",
+  "probe_sha256": "95ae979fb336a95f40ebca1b52a72be5ce184862c16990668d47ae42778a017f",
+  "application_image": "sha256:017af8b24cc8a6581df8e6bc3fc7b1c72710c302b574d2e5f8c37853248031a0",
+  "environment": {
+    "region": "centralindia",
+    "vm": "Standard_D4ls_v6",
+    "vm_vcpus": 4,
+    "vm_ram_gib": 8,
+    "postgres": "Standard_D2ds_v5",
+    "postgres_storage_gib": 32,
+    "postgres_storage_iops": 120,
+    "ledger_cpu_limit": 1.75,
+    "projection_cpu_limit": 0.75,
+    "kafka_cpu_limit": 0.75,
+    "load_generator_cpu_limit": 0.5,
+    "load_generator_topology": "same VM; separate container"
+  },
+  "profiles": [
+    {
+      "profile": "correctness",
+      "duration_seconds": 100,
+      "max_virtual_users": 20,
+      "successful_transfers": 19726,
+      "average_transfers_per_second": 197.2431399562061,
+      "http_failures": 0,
+      "p95_ms": 110.31739525,
+      "p99_ms": 161.51041025,
+      "thresholds_passed": true
+    },
+    {
+      "profile": "performance",
+      "duration_seconds": 150,
+      "max_virtual_users": 100,
+      "successful_transfers": 32018,
+      "average_transfers_per_second": 213.44037322960205,
+      "http_failures": 0,
+      "p95_ms": 545.56289645,
+      "p99_ms": 957.2064375599984,
+      "thresholds_passed": true
+    }
+  ],
+  "total_successful_load_transfers": 51744,
+  "recovery": [
+    {
+      "check": "projection_restart",
+      "transfers_while_stopped": 20,
+      "recovery_seconds": 20.422
+    },
+    {
+      "check": "broker_restart",
+      "transfers_while_stopped": 20,
+      "durable_pending_events": 20,
+      "recovery_seconds": 8.892
+    },
+    {
+      "check": "ledger_restart_replay",
+      "recovery_seconds": 8.98,
+      "original_transaction_returned": true,
+      "posting_count_unchanged": true
+    },
+    {
+      "check": "duplicate_event",
+      "committed_offset_advanced": true,
+      "statement_rows_unchanged": true,
+      "processed_event_count_unchanged": true
+    }
+  ],
+  "backup_restore": {
+    "check": "backup_restore",
+    "mode": "quiesced logical backup into separate database",
+    "dump_seconds": 8.962,
+    "restore_seconds": 4.578,
+    "backup_bytes": 15110269,
+    "matching_table_fingerprints": 11,
+    "postings": 103578
+  },
+  "final_invariants": {
+    "ledger_rows": 103578,
+    "projection_rows": 103578,
+    "global_posting_sum": 0,
+    "negative_customer_balances": 0,
+    "cached_balance_mismatches": 0,
+    "unbalanced_transactions": 0,
+    "statement_drift": 0,
+    "daily_drift": 0
+  },
+  "http_acceptance_checks_including_polls": 22,
+  "temporary_resource_group_cleanup_confirmed": true,
+  "raw_receipt_sha256": {
+    "backup.dump": "7ada3caeef242c97835c33b32974e972c8a667174d890f7bfea25030fc1e65a3",
+    "correctness.json": "7dd5d3615f1b1b2655cf997ccd7377a93ed2fd0c223a42b333294cae9dc45e1c",
+    "correctness.log": "4b136cf68094eaf9439f3eb67bb66f91a5cd8e42b11b66c142bc7a5a79a6abcc",
+    "final-invariants.txt": "7db07b64e9191d071a9568b79b45dd9646d1df51e91a7d8547e0b864234ceb2a",
+    "performance.json": "46b2987955392ca93dd94810a3a40fdea8776d5db0cbeaf9b950e6d3002d2cf2",
+    "performance.log": "bee7dc2d96f8b81b2ec809775c08ebc6c5afbdec17432e5ee3e31305888c6165",
+    "report.json": "e9b8e584bb29a95e6652cd3990b3a34603f75c538c5985ade856415bdc72a8e6",
+    "resource-samples-correctness.jsonl": "7c3b47eead23fc08351801eb19cc8007aa118cb0bd990ac475d406234c3ce9a9",
+    "resource-samples-performance.jsonl": "cb99f94bdf664624a9af8621b0515baf00721a114355c3374bf9366bedf6a7b8"
+  }
+}
