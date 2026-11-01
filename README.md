@@ -55,10 +55,15 @@ The transfer-query optimization removes four PostgreSQL statements per fresh tra
 
 The database user in local Compose has administrative privileges. Direct SQL can alter balances without postings, append to old transactions, disable triggers, or truncate history. SQL administrators and Kafka publishers are trusted. Projection data is eventually consistent and is never the balance authority. No guarantee of exactly-once end-to-end processing, uninterrupted delivery, deadlock elimination across all strategies, or safe internet deployment is made.
 
-The recovery and reconciliation candidate passed 66 ledger and 36 projection
-tests in separate clean module runs, plus nine worker regressions. Those local
-results do not establish a fresh whole-reactor or hosted CI pass. The original
-two-account latency gate remains failed; a separate many-account workload cannot
-replace it. See the recovery guide for migration and rollback limits. No
-repository license has been selected; no additional redistribution permission is
-asserted.
+The [hosted Java 21 reactor](https://github.com/pavann19/LedgerLine/actions/runs/41318940329)
+passed 106 tests for runtime revision `43c8a0c` on 1 November 2026, together with
+the history scan and both image/SBOM/vulnerability gates. The separate
+[worker checks](https://github.com/pavann19/LedgerLine/actions/runs/41318940317)
+also passed. Each later PR must pass its own checks. The original two-account
+latency gate remains failed; a separate many-account workload cannot replace it.
+See the recovery guide for migration and rollback limits.
+
+## License
+
+Original project code is licensed under [Apache-2.0](LICENSE). Dependency licenses
+and distribution obligations are retained in [third-party notices](THIRD_PARTY_NOTICES.txt).
