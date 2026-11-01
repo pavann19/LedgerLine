@@ -1,5 +1,12 @@
 # Image vulnerability gate
 
+Kafka's transitive Snappy codec is pinned to 1.1.10.9 in both services.
+The upstream fixes address [unbounded decompression allocation](https://github.com/xerial/snappy-java/security/advisories/GHSA-q233-g92q-qxp6)
+and [typed-array buffer overflow](https://github.com/xerial/snappy-java/security/advisories/GHSA-gwq9-9ffj-mvrv).
+Codec regressions cover byte/int-array round trips, impossible declared lengths
+and misaligned typed-array output. The original failed image scan is retained;
+no exception or severity-filter change bypasses it.
+
 Spring Boot 4.0.9 manages Spring Framework 7.0.10. This replaces the affected Spring MVC 6.2.19 dependency used by the previous release. The vendor fixes for CVE-2026-47884 and CVE-2026-47890 start at Spring 7.0.9.
 
 The active policy has **zero applicability exceptions**. Its previous November 23 expiry is retired, not extended. Every HIGH/CRITICAL finding collected by the configured scanner is blocking; the raw Trivy JSON and separate disposition report remain CI artifacts. A historical finding or unrelated/new CVE cannot reuse the retired decisions. Scan failure, malformed output or a missing report is a failure.
