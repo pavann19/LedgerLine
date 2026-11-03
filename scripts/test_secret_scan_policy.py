@@ -2,7 +2,6 @@
 import json
 from pathlib import Path
 import re
-import secrets
 import subprocess
 import tempfile
 
@@ -13,9 +12,13 @@ FIXTURE = "ledger-service/src/test/java/com/ledgerline/ledger/security/JwtBounda
 
 def check():
     fixture = re.search(r'SECRET = "([^"]+)"', (ROOT / FIXTURE).read_text()).group(1)
-    cases = [(FIXTURE, fixture, 0), (FIXTURE, secrets.token_urlsafe(32), 1),
-             ("another-test/BoundaryTest.java", fixture, 1)]
-    for name, value, expected in cases:
+    # The scanner can legitimately ignore alphabetic-only generated values.
+    # Keep the mutation deterministic and representative of its detectable syntax.
+    mutated = "synthetic-boundary-" + "A1b2C3d4E5f6G7h8J9k0LmNpQrStUvWx"
+    cases = [("exact fixture", FIXTURE, fixture, 0),
+             ("changed value", FIXTURE, mutated, 1),
+             ("different path", "another-test/BoundaryTest.java", fixture, 1)]
+    for label, name, value, expected in cases:
         with tempfile.TemporaryDirectory(prefix="ledgerline-scan-policy-") as directory:
             root = Path(directory)
             path = root / "source" / name
@@ -27,10 +30,13 @@ def check():
                 "--log-level", "error", "--report-format", "json", "--report-path", "/work/report.json"],
                 capture_output=True, text=True, timeout=120)
             if result.returncode != expected:
-                raise AssertionError(f"Unexpected scanner exit {result.returncode}, expected {expected}: {result.stderr}")
+                raise AssertionError(f"{label}: scanner exit {result.returncode}, expected {expected}: {result.stderr}")
             findings = json.loads((root / "report.json").read_text())
             if bool(findings) != bool(expected):
-                raise AssertionError("Scanner report did not match expected detection")
+                raise AssertionError(f"{label}: scanner report did not match expected detection")
+            if expected and not any(row.get("RuleID") == "generic-api-key"
+                                    and row.get("File", "").endswith(name) for row in findings):
+                raise AssertionError(f"{label}: expected rule/path was not detected")
     print("PASS: exact fixture allowed; changed value and alternate path detected (3 controls)")
 
 
