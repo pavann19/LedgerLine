@@ -92,6 +92,52 @@ class AsyncFailureAndResilienceTest extends BaseIntegrationTest {
     }
 
     @Test
+    void httpTraceSurvivesCommittedOutboxAndRealKafkaPublish() throws Exception {
+        var from=accountService.createAccount(new CreateAccountRequest("USD",AccountType.CUSTOMER));
+        var to=accountService.createAccount(new CreateAccountRequest("USD",AccountType.CUSTOMER));
+        fundAccount(from.id(),50000L);
+        String parent="00-11111111111111111111111111111111-2222222222222222-01";
+        var request=new org.springframework.mock.web.MockHttpServletRequest("POST","/api/v1/transfers");
+        request.addHeader("traceparent",parent);
+        var response=new org.springframework.mock.web.MockHttpServletResponse();
+        var transaction=new java.util.concurrent.atomic.AtomicReference<UUID>();
+        var props=new java.util.Properties();
+        props.put("bootstrap.servers",kafka.getBootstrapServers());
+        props.put("group.id","trace-fixture-"+UUID.randomUUID());
+        props.put("auto.offset.reset","earliest"); props.put("enable.auto.commit","false");
+        props.put("key.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
+        props.put("value.deserializer","org.apache.kafka.common.serialization.StringDeserializer");
+        try(var sdk=io.opentelemetry.sdk.OpenTelemetrySdk.builder().setTracerProvider(
+            io.opentelemetry.sdk.trace.SdkTracerProvider.builder().build()).build();
+            var consumer=new org.apache.kafka.clients.consumer.KafkaConsumer<String,String>(props)) {
+            var filter=new com.ledgerline.ledger.observability.CorrelationFilter(new com.ledgerline.ledger.observability.TraceSupport(sdk));
+            filter.doFilter(request,response,(req,res)->transaction.set(transferService.transfer("trace-"+UUID.randomUUID(),
+                new TransferRequest(from.id(),to.id(),1500L,"USD"),null).transactionId()));
+            var stored=jdbcClient.sql("SELECT payload::text FROM outbox WHERE aggregate_id=:id")
+                .param("id",transaction.get()).query(String.class).single();
+            String persisted=objectMapper.readTree(stored).path("traceparent").asString();
+            assertEquals(response.getHeader("traceparent"),persisted);
+            assertTrue(persisted.startsWith("00-11111111111111111111111111111111-"));
+            assertNotEquals(parent,persisted,"HTTP processing must create its own span");
+            assertTrue(outboxRelayPoller.pollAndPublish()>0);
+            consumer.subscribe(java.util.List.of("ledger.transfers.v1"));
+            var matched=new java.util.concurrent.atomic.AtomicReference<org.apache.kafka.clients.consumer.ConsumerRecord<String,String>>();
+            await().atMost(Duration.ofSeconds(20)).until(()-> {
+                for(var record:consumer.poll(Duration.ofMillis(250))) {
+                    if(record.key().equals(transaction.get().toString())) matched.set(record);
+                }
+                return matched.get()!=null;
+            });
+            var header=matched.get().headers().lastHeader("traceparent");
+            assertNotNull(header);
+            String produced=new String(header.value(),java.nio.charset.StandardCharsets.US_ASCII);
+            assertTrue(produced.startsWith("00-11111111111111111111111111111111-"));
+            assertNotEquals(persisted,produced,"Relay must create a child producer span");
+            assertEquals(persisted,objectMapper.readTree(matched.get().value()).path("traceparent").asString());
+        }
+    }
+
+    @Test
     @DisplayName("Kafka Down: Synchronous transfers succeed, outbox backlog accumulates, and drains after the broker restarts")
     void shouldAccumulateOutboxBacklogWhenKafkaIsDownAndDrainAfterRecovery() {
         AccountResponse from = accountService.createAccount(new CreateAccountRequest("USD", AccountType.CUSTOMER));

@@ -24,6 +24,9 @@ spring:
       ack-mode: manual_immediate
 
 server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
   shutdown: graceful
   port: ${PORT:8081}
 
@@ -61,3 +64,13 @@ springdoc:
     oauth:
       client-id: ${OAUTH2_SWAGGER_CLIENT_ID:}
       use-pkce-with-authorization-code-grant: true
+
+logging:
+  structured:
+    format:
+      console: ecs
+
+ledgerline:
+  telemetry:
+    endpoint: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:}
+    sample-ratio: ${TRACE_SAMPLE_RATIO:0.1}

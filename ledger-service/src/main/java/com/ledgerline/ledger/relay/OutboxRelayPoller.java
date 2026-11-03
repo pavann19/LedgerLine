@@ -25,6 +25,10 @@ public class OutboxRelayPoller {
 
     private final OutboxRepository outboxRepository;
     private final KafkaTemplate<String, String> kafkaTemplate;
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.ledgerline.ledger.observability.TraceSupport tracing =
+        new com.ledgerline.ledger.observability.TraceSupport(io.opentelemetry.api.OpenTelemetry.noop());
+    private final tools.jackson.databind.ObjectMapper traceMapper = new tools.jackson.databind.ObjectMapper();
     private final String topic;
     private final int batchSize;
 
@@ -66,9 +70,16 @@ public class OutboxRelayPoller {
 
         int publishedCount = 0;
         for (OutboxEvent event : unpublishedEvents) {
-            try {
+            String parent = null;
+            try { parent = traceMapper.readTree(event.payload()).path("traceparent").asString(null); }
+            catch (RuntimeException ignored) { /* Old/invalid trace metadata cannot affect delivery. */ }
+            try (var operation = tracing.start("outbox.publish",io.opentelemetry.api.trace.SpanKind.PRODUCER,parent)) {
+                try {
                 // Publish to Kafka with aggregateId key to preserve partition ordering
-                kafkaTemplate.send(topic, event.aggregateId().toString(), event.payload())
+                var record=new org.apache.kafka.clients.producer.ProducerRecord<String,String>(topic,event.aggregateId().toString(),event.payload());
+                String propagated=com.ledgerline.ledger.observability.TraceSupport.currentParent();
+                if(propagated!=null) record.headers().add("traceparent",propagated.getBytes(java.nio.charset.StandardCharsets.US_ASCII));
+                kafkaTemplate.send(record)
                     .get(5, TimeUnit.SECONDS);
 
                 // Check failure test hook
@@ -79,10 +90,12 @@ public class OutboxRelayPoller {
 
                 outboxRepository.markPublished(event.id(), Instant.now());
                 publishedCount++;
-            } catch (Exception e) {
-                log.error("Failed to publish outbox event {}: {}", event.id(), e.getMessage());
+                } catch (Exception e) {
+                operation.failed();
+                log.error("Outbox publish failed; failureClass={}", e.getClass().getSimpleName());
                 // Break to allow next polling iteration to retry
                 break;
+                }
             }
         }
         return publishedCount;

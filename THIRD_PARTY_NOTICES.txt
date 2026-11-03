@@ -4644,3 +4644,120 @@ Copyright (c) 2012-2026 VMware, Inc.
 This product is licensed to you under the Apache License, Version 2.0
 (the "License"). You may not use this product except in compliance with
 the License.
+
+==============================================================================
+2026-11-03 RUNTIME TRACING DEPENDENCY SUPPLEMENT
+
+The 100-component inventory above is retained as its original historical SBOM
+snapshot. It has not been silently regenerated. Inspection of BOOT-INF/lib in
+both newly verified executable JARs found a union of 115 third-party JAR filenames.
+Compared with the 100 artifact filenames listed above, this candidate adds the
+17 components below; gson-2.12.1.jar and jcip-annotations-1.0-1.jar are absent from
+these two current runtime JARs. Their older notices remain preserved above.
+This comparison covers executable JAR libraries, not test/build dependencies,
+container operating systems, or a future distribution.
+
+The exact added JAR bytes matched their cached Maven artifacts. Each matching
+published POM declares Apache-2.0. An archive-member scan found no embedded
+LICENSE, NOTICE or COPYING path in any of these 17 JARs, including META-INF.
+Accordingly there is no additional embedded notice text to reproduce from these
+JARs. This is an observation about these artifacts, not permission to discard
+attribution from an upstream source distribution. Retain the applicable Apache
+License 2.0 text (included as this repository's LICENSE) when distributing them,
+and retain upstream source copyright/attribution notices and any applicable
+NOTICE supplied with the corresponding source or binary distribution. A future
+binary/container release still needs its own complete notice/source bundle.
+
+Exact upstream POM declarations and matching source-artifact locations:
+
+org.jetbrains:annotations:17.0.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/org/jetbrains/annotations/17.0.0/annotations-17.0.0.pom
+  Source: https://repo.maven.apache.org/maven2/org/jetbrains/annotations/17.0.0/annotations-17.0.0-sources.jar
+
+org.jetbrains.kotlin:kotlin-stdlib:2.2.21
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.2.21/kotlin-stdlib-2.2.21.pom
+  Source: https://repo.maven.apache.org/maven2/org/jetbrains/kotlin/kotlin-stdlib/2.2.21/kotlin-stdlib-2.2.21-sources.jar
+
+com.squareup.okhttp3:okhttp-jvm:5.2.1
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-jvm/5.2.1/okhttp-jvm-5.2.1.pom
+  Source: https://repo.maven.apache.org/maven2/com/squareup/okhttp3/okhttp-jvm/5.2.1/okhttp-jvm-5.2.1-sources.jar
+
+com.squareup.okio:okio-jvm:3.16.1
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.16.1/okio-jvm-3.16.1.pom
+  Source: https://repo.maven.apache.org/maven2/com/squareup/okio/okio-jvm/3.16.1/okio-jvm-3.16.1-sources.jar
+
+io.opentelemetry:opentelemetry-api:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-api/1.55.0/opentelemetry-api-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-api/1.55.0/opentelemetry-api-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-common:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-common/1.55.0/opentelemetry-common-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-common/1.55.0/opentelemetry-common-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-context:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-context/1.55.0/opentelemetry-context-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-context/1.55.0/opentelemetry-context-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-exporter-common:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-common/1.55.0/opentelemetry-exporter-common-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-common/1.55.0/opentelemetry-exporter-common-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-exporter-otlp:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-otlp/1.55.0/opentelemetry-exporter-otlp-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-otlp/1.55.0/opentelemetry-exporter-otlp-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-exporter-otlp-common:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-otlp-common/1.55.0/opentelemetry-exporter-otlp-common-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-otlp-common/1.55.0/opentelemetry-exporter-otlp-common-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-exporter-sender-okhttp:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-sender-okhttp/1.55.0/opentelemetry-exporter-sender-okhttp-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-exporter-sender-okhttp/1.55.0/opentelemetry-exporter-sender-okhttp-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk/1.55.0/opentelemetry-sdk-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk/1.55.0/opentelemetry-sdk-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk-common:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-common/1.55.0/opentelemetry-sdk-common-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-common/1.55.0/opentelemetry-sdk-common-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk-extension-autoconfigure-spi:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-extension-autoconfigure-spi/1.55.0/opentelemetry-sdk-extension-autoconfigure-spi-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-extension-autoconfigure-spi/1.55.0/opentelemetry-sdk-extension-autoconfigure-spi-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk-logs:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-logs/1.55.0/opentelemetry-sdk-logs-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-logs/1.55.0/opentelemetry-sdk-logs-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk-metrics:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-metrics/1.55.0/opentelemetry-sdk-metrics-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-metrics/1.55.0/opentelemetry-sdk-metrics-1.55.0-sources.jar
+
+io.opentelemetry:opentelemetry-sdk-trace:1.55.0
+  Declared license: Apache-2.0
+  POM: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-trace/1.55.0/opentelemetry-sdk-trace-1.55.0.pom
+  Source: https://repo.maven.apache.org/maven2/io/opentelemetry/opentelemetry-sdk-trace/1.55.0/opentelemetry-sdk-trace-1.55.0-sources.jar
+
+OpenTelemetry Java's matching upstream license:
+  https://github.com/open-telemetry/opentelemetry-java/blob/v1.55.0/LICENSE
+Kotlin's repository NOTICE at the matching tag explicitly describes the Kotlin
+Compiler distribution, not a notice embedded in the kotlin-stdlib JAR:
+  https://github.com/JetBrains/kotlin/blob/v2.2.21/license/NOTICE.txt
+Do not present that compiler-specific notice as an inspected stdlib JAR notice.

@@ -42,6 +42,8 @@ The temporary Boot 4 Azure validation on 2026-10-25 passed 51,744 load transfers
 
 The transfer-query optimization removes four PostgreSQL statements per fresh transfer using the safe strategies and passes 59 regression tests. Its repeated Azure performance validation failed and did not complete (latency thresholds and projection catch-up); no stable percentage gain is claimed. See [optimization results and retained limits](docs/TRANSFER_QUERY_OPTIMIZATION.md).
 
+The [current local investigation](docs/PERFORMANCE_RESULTS_2026-11-03.md) profiles connection pools, transaction phases, PostgreSQL queries, JVM resources and Kafka lag. It includes a reproducible baseline patch, all matched runs and shared-host limitations. See the [backend checklist](docs/ENGINEERING_CHECKLIST.md) for tested correctness, structured tracing and CI gates.
+
 - [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)

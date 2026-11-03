@@ -63,6 +63,8 @@
             <artifactId>flyway-database-postgresql</artifactId>
         </dependency>
 
+        <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-sdk</artifactId></dependency>
+        <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-exporter-otlp</artifactId></dependency>
         <!-- Metrics -->
         <dependency>
             <groupId>io.micrometer</groupId>

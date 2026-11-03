@@ -1,0 +1,42 @@
+diff --git a/ledger-service/src/main/java/com/ledgerline/ledger/service/strategy/PessimisticTransferStrategy.java b/ledger-service/src/main/java/com/ledgerline/ledger/service/strategy/PessimisticTransferStrategy.java
+--- a/ledger-service/src/main/java/com/ledgerline/ledger/service/strategy/PessimisticTransferStrategy.java
++++ b/ledger-service/src/main/java/com/ledgerline/ledger/service/strategy/PessimisticTransferStrategy.java
+@@ -54,8 +54,12 @@
+ 
+     @Override
+     public TransferResponse execute(String idempotencyKey, TransferRequest request, byte[] requestHash) {
+-        // Resolve replays once, under the transaction-scoped key lock below.
+-        // A speculative miss here consumes another pooled connection per new transfer.
++        // Fast-path idempotency check
++        Optional<TransferResponse> cached = support.checkIdempotency(idempotencyKey, requestHash);
++        if (cached.isPresent()) {
++            return cached.get();
++        }
++
+         // Account metadata is authoritatively checked under share locks below.
+         // Avoid two speculative reads that would immediately be repeated there.
+         support.validateTransferShape(request);
+diff --git a/ledger-service/src/test/java/com/ledgerline/ledger/domain/TransferStrategyRegressionTest.java b/ledger-service/src/test/java/com/ledgerline/ledger/domain/TransferStrategyRegressionTest.java
+--- a/ledger-service/src/test/java/com/ledgerline/ledger/domain/TransferStrategyRegressionTest.java
++++ b/ledger-service/src/test/java/com/ledgerline/ledger/domain/TransferStrategyRegressionTest.java
+@@ -51,7 +51,7 @@
+         UUID from = new UUID(0, 1), to = new UUID(0, 2);
+         TransferResponse original = new TransferResponse(UUID.randomUUID(), "key", TransactionStatus.POSTED,
+             Instant.now(), List.of(), true);
+-        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.of(original));
++        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.empty(), Optional.of(original));
+         assertSame(original, new PessimisticTransferStrategy(support, balances, manager)
+             .execute("key", new TransferRequest(from, to, 1, "USD"), new byte[32]));
+         verify(support, never()).recordTransactionAndPostings(any(), anyString(), any(), any(), any());
+@@ -60,10 +60,9 @@
+         verify(balances, never()).updatePair(any(),any());
+         verifyNoInteractions(balances);
+         var order = inOrder(support);
++        order.verify(support).checkIdempotency(eq("key"), any());
+         order.verify(support).validateTransferShape(any());
+         order.verify(support).lockIdempotencyKey("key");
+         order.verify(support).checkIdempotency(eq("key"), any());
+-        verify(support, times(1)).checkIdempotency(eq("key"), any());
+-        verify(manager).commit(any());
+     }
+ }

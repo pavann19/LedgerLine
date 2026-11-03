@@ -51,7 +51,7 @@ class TransferStrategyRegressionTest {
         UUID from = new UUID(0, 1), to = new UUID(0, 2);
         TransferResponse original = new TransferResponse(UUID.randomUUID(), "key", TransactionStatus.POSTED,
             Instant.now(), List.of(), true);
-        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.empty(), Optional.of(original));
+        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.of(original));
         assertSame(original, new PessimisticTransferStrategy(support, balances, manager)
             .execute("key", new TransferRequest(from, to, 1, "USD"), new byte[32]));
         verify(support, never()).recordTransactionAndPostings(any(), anyString(), any(), any(), any());
@@ -60,9 +60,10 @@ class TransferStrategyRegressionTest {
         verify(balances, never()).updatePair(any(),any());
         verifyNoInteractions(balances);
         var order = inOrder(support);
-        order.verify(support).checkIdempotency(eq("key"), any());
         order.verify(support).validateTransferShape(any());
         order.verify(support).lockIdempotencyKey("key");
         order.verify(support).checkIdempotency(eq("key"), any());
+        verify(support, times(1)).checkIdempotency(eq("key"), any());
+        verify(manager).commit(any());
     }
 }

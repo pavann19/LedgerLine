@@ -15,6 +15,9 @@ public class TransferEventConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(TransferEventConsumer.class);
 
+    @org.springframework.beans.factory.annotation.Autowired
+    private com.ledgerline.projection.observability.TraceSupport tracing =
+        new com.ledgerline.projection.observability.TraceSupport(io.opentelemetry.api.OpenTelemetry.noop());
     private final ProjectionService projectionService;
     private final ObjectMapper objectMapper;
 
@@ -35,7 +38,12 @@ public class TransferEventConsumer {
         groupId = "${spring.kafka.consumer.group-id:ledgerline-projection}", batch = "true"
     )
     public void onMessages(java.util.List<ConsumerRecord<String, String>> records, Acknowledgment ack) {
-        try {
+        var parents = records.stream().map(record -> {
+            var header=record.headers().lastHeader("traceparent");
+            return header == null || header.value() == null || header.value().length > 55 ? null : new String(header.value(),java.nio.charset.StandardCharsets.US_ASCII);
+        }).toList();
+        try (var operation = tracing.startBatch("projection.process",parents)) {
+            try {
             var payloads = new java.util.ArrayList<TransferEventPayload>(records.size());
             for (var record : records) payloads.add(objectMapper.readValue(record.value(), TransferEventPayload.class));
 
@@ -52,10 +60,12 @@ public class TransferEventConsumer {
             if (ack != null) {
                 ack.acknowledge();
             }
-        } catch (Exception e) {
+            } catch (Exception e) {
+            operation.failed();
             // Exception messages can contain raw records; telemetry contains no payload.
             log.error("Projection batch failed; records={}, failureClass={}", records.size(), e.getClass().getSimpleName());
-            throw new RuntimeException("Failed processing projection batch: " + e.getClass().getSimpleName());
+            throw new RuntimeException("Failed processing projection batch: " + e.getClass().getSimpleName(), e);
+            }
         }
     }
 }

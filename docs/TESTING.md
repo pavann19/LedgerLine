@@ -69,3 +69,8 @@ powershell -ExecutionPolicy Bypass -File scripts/verify-local-stability.ps1
 ```
 
 The script retains logs outside the checkout, runs the existing correctness workload unmodified, requires zero balance drift and the expected scoped total, waits at most 60 seconds for projection row catch-up, then reruns the evaluator and API probes against the same stack. It must be executed successfully before reused-stack stability is claimed. On failed/rekeyed demo runs, the older local summary is moved to an ignored previous-summary file so stale tokens/results are not mistaken for current evidence.
+
+
+## Backend hardening checks
+
+The Java suite includes actual HTTP-filter -> PostgreSQL outbox -> Kafka trace propagation, bounded real OTLP export/outage, malformed consumer trace metadata, MDC cleanup, phase-observer failure isolation and operator-only metric access. The separate [trace smoke](TRACE_FLOW_SMOKE.md) checks both running services and collector outage. [Static analysis](STATIC_ANALYSIS.md) includes a known-defect negative control. [Benchmark controls](PERFORMANCE_BENCHMARK.md) reject changed identities, invalid profiles and unsafe comparison inputs; the [performance report](PERFORMANCE_RESULTS_2026-11-03.md) records actual results and limits.
