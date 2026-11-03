@@ -30,18 +30,24 @@ class PostingWriteContractTest extends BaseIntegrationTest {
     @Autowired PlatformTransactionManager manager;
     @Autowired com.ledgerline.ledger.repository.TransferWriteRepository journal;
 
-    @Test
-    void failedAuditRollsBackJournalHeaderAndOutboxTogether() {
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(booleans = {false, true})
+    void failedAuditRollsBackJournalHeaderAndOutboxTogether(boolean updateBalances) {
         UUID from = accounts.createAccount(new CreateAccountRequest("USD",AccountType.OVERDRAFT)).id();
         UUID to = accounts.createAccount(new CreateAccountRequest("USD",AccountType.CUSTOMER)).id();
         UUID id = UUID.randomUUID();
         assertThrows(org.springframework.dao.DataAccessException.class, () ->
             new TransactionTemplate(manager).execute(status -> journal.insert(id,"atomic-"+id,new byte[32],
-                from,to,1,"USD",Instant.now(),"{}","SYSTEM","invalid-json")));
+                from,to,1,"USD",Instant.now(),"{}","SYSTEM","invalid-json",
+                updateBalances ? java.util.List.of(
+                    new com.ledgerline.ledger.domain.AccountBalance(from,-1,AccountType.OVERDRAFT,1),
+                    new com.ledgerline.ledger.domain.AccountBalance(to,1,AccountType.CUSTOMER,1)) : java.util.List.of())));
         assertEquals(0L,jdbc.sql("SELECT count(*) FROM transactions WHERE id=?").param(id).query(Long.class).single());
         assertTrue(postings.findByTransactionId(id).isEmpty());
         assertEquals(0L,jdbc.sql("SELECT count(*) FROM outbox WHERE aggregate_id=?").param(id).query(Long.class).single());
         assertEquals(0L,jdbc.sql("SELECT count(*) FROM audit_log WHERE entity_id=?").param(id.toString()).query(Long.class).single());
+        assertEquals(0L, accounts.getAccount(from).balanceMinor());
+        assertEquals(0L, accounts.getAccount(to).balanceMinor());
     }
 
     @ParameterizedTest

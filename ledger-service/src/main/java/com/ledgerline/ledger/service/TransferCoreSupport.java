@@ -71,7 +71,7 @@ public class TransferCoreSupport {
         validateAccounts(request, fromAccount, toAccount);
     }
 
-    private void validateTransferShape(TransferRequest request) {
+    public void validateTransferShape(TransferRequest request) {
         if (request.fromAccountId().equals(request.toAccountId())) {
             throw new InvalidTransferException("Source and destination accounts must be distinct");
         }
@@ -134,6 +134,11 @@ public class TransferCoreSupport {
         TransferRequest request,
         Instant now
     ) {
+        return recordTransactionAndPostings(transactionId, idempotencyKey, requestHash, request, now, List.of());
+    }
+
+    public TransferResponse recordTransactionAndPostings(UUID transactionId, String idempotencyKey,
+        byte[] requestHash, TransferRequest request, Instant now, List<AccountBalance> balances) {
         String currency = request.currency().trim().toUpperCase(java.util.Locale.ROOT);
         var payload = new TransferEventPayload(UUID.randomUUID(), transactionId, request.fromAccountId(),
             request.toAccountId(), request.amountMinor(), currency, now,
@@ -148,7 +153,7 @@ public class TransferCoreSupport {
             request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency);
         List<Posting> persistedPostings = transferWriteRepository.insert(transactionId, idempotencyKey,
             requestHash, request.fromAccountId(), request.toAccountId(), request.amountMinor(), currency,
-            now, payloadJson, currentPrincipal.id(), details);
+            now, payloadJson, currentPrincipal.id(), details, balances);
 
         // 5. Return the stored IDs and timestamp precision from INSERT ... RETURNING.
         List<PostingDto> postingDtos = persistedPostings.stream()

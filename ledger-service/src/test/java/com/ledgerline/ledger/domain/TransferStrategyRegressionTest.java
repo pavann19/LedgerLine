@@ -43,7 +43,7 @@ class TransferStrategyRegressionTest {
         verify(manager, never()).commit(any());
     }
 
-    @Test void duplicateCommittedWhileWaitingForLocksReplaysBeforeFundsCheck() {
+    @Test void duplicateCommittedWhileWaitingForIdempotencyLockReplaysBeforeBalanceLocks() {
         TransferCoreSupport support = mock(TransferCoreSupport.class);
         AccountBalanceRepository balances = mock(AccountBalanceRepository.class);
         PlatformTransactionManager manager = mock(PlatformTransactionManager.class);
@@ -51,15 +51,18 @@ class TransferStrategyRegressionTest {
         UUID from = new UUID(0, 1), to = new UUID(0, 2);
         TransferResponse original = new TransferResponse(UUID.randomUUID(), "key", TransactionStatus.POSTED,
             Instant.now(), List.of(), true);
-        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.empty(), Optional.empty(), Optional.of(original));
-        when(balances.findByIdForUpdate(from)).thenReturn(Optional.of(new AccountBalance(from, 0, AccountType.CUSTOMER, 1)));
-        when(balances.findByIdForUpdate(to)).thenReturn(Optional.of(new AccountBalance(to, 1, AccountType.CUSTOMER, 1)));
-        when(balances.findPairForUpdate(from,to)).thenReturn(List.of(
-            new AccountBalance(from,0,AccountType.CUSTOMER,1),new AccountBalance(to,1,AccountType.CUSTOMER,1)));
+        when(support.checkIdempotency(anyString(), any())).thenReturn(Optional.empty(), Optional.of(original));
         assertSame(original, new PessimisticTransferStrategy(support, balances, manager)
             .execute("key", new TransferRequest(from, to, 1, "USD"), new byte[32]));
         verify(support, never()).recordTransactionAndPostings(any(), anyString(), any(), any(), any());
+        verify(support, never()).recordTransactionAndPostings(any(), anyString(), any(), any(), any(), anyList());
         verify(balances, never()).updateBalance(any());
         verify(balances, never()).updatePair(any(),any());
+        verifyNoInteractions(balances);
+        var order = inOrder(support);
+        order.verify(support).checkIdempotency(eq("key"), any());
+        order.verify(support).validateTransferShape(any());
+        order.verify(support).lockIdempotencyKey("key");
+        order.verify(support).checkIdempotency(eq("key"), any());
     }
 }

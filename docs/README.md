@@ -4,6 +4,8 @@ Start with the [project overview](../README.md) and [verification status](VERIFI
 
 ## Guides
 
+- [Backend engineering checklist](ENGINEERING_CHECKLIST.md)
+
 - [ARCHITECTURE](ARCHITECTURE.md)
 - [FINANCIAL INVARIANTS](FINANCIAL_INVARIANTS.md)
 - [API SECURITY](API_SECURITY.md)

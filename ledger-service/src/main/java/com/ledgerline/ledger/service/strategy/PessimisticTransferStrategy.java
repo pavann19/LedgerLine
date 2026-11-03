@@ -48,11 +48,13 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
             return cached.get();
         }
 
-        support.validateTransferRequest(request);
+        // Account metadata is authoritatively checked under share locks below.
+        // Avoid two speculative reads that would immediately be repeated there.
+        support.validateTransferShape(request);
 
         try {
             return transactionTemplate.execute(status -> {
-                    support.lockIdempotencyKey(idempotencyKey);
+                support.lockIdempotencyKey(idempotencyKey);
                 // Check idempotency inside transaction in case it was just committed
                 Optional<TransferResponse> replay = support.checkIdempotency(idempotencyKey, requestHash);
                 if (replay.isPresent()) {
@@ -74,11 +76,9 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                 AccountBalance secondBalance = lockedBalances.stream().filter(b -> b.accountId().equals(secondLockId)).findFirst()
                     .orElseThrow(() -> new AccountNotFoundException(secondLockId));
 
-                // A duplicate may have committed while this request waited for the locks.
-                Optional<TransferResponse> lockedReplay = support.checkIdempotency(idempotencyKey, requestHash);
-                if (lockedReplay.isPresent()) {
-                    return lockedReplay.get();
-                }
+                // The transaction-scoped idempotency lock is still held. Same-key
+                // callers cannot commit after the replay check above, so another
+                // database round trip here only extends the hot balance lock hold.
 
                 AccountBalance fromBalance = fromFirst ? firstBalance : secondBalance;
                 AccountBalance toBalance = fromFirst ? secondBalance : firstBalance;
@@ -94,28 +94,22 @@ public class PessimisticTransferStrategy implements TransferExecutionStrategy {
                 UUID transactionId = UUID.randomUUID();
                 Instant now = Instant.now();
 
-                TransferResponse response = support.recordTransactionAndPostings(
-                    transactionId,
-                    idempotencyKey,
-                    requestHash,
-                    request,
-                    now
-                );
-
-                // Update cached balances
-                balanceRepository.updatePair(new AccountBalance(
+                // Check arithmetic before persistence; write journal and both caches
+                // in one command to shorten the serialized balance-lock section.
+                var updatedFrom = new AccountBalance(
                     fromId,
                     Math.subtractExact(fromBalance.balanceMinor(), request.amountMinor()),
                     fromBalance.accountType(),
-                    fromBalance.version() + 1
-                ), new AccountBalance(
+                    Math.incrementExact(fromBalance.version())
+                );
+                var updatedTo = new AccountBalance(
                     toId,
                     Math.addExact(toBalance.balanceMinor(), request.amountMinor()),
                     toBalance.accountType(),
-                    toBalance.version() + 1
-                ));
-
-                return response;
+                    Math.incrementExact(toBalance.version())
+                );
+                return support.recordTransactionAndPostings(transactionId, idempotencyKey, requestHash,
+                    request, now, java.util.List.of(updatedFrom, updatedTo));
             });
         } catch (DataIntegrityViolationException e) {
             // After transaction rollback, check if concurrent duplicate committed the same key

@@ -32,6 +32,14 @@ public class GlobalExceptionHandler {
     }
     @ExceptionHandler(DataIntegrityViolationException.class)
     ResponseEntity<ProblemDetail> integrity(DataIntegrityViolationException e, HttpServletRequest r) { return problem(HttpStatus.CONFLICT,"data-integrity-violation","Data integrity violation","A database constraint rejected the request",r,null); }
+    @ExceptionHandler({org.springframework.dao.TransientDataAccessException.class,
+        org.springframework.dao.DataAccessResourceFailureException.class,
+        org.springframework.transaction.CannotCreateTransactionException.class,
+        org.springframework.transaction.TransactionTimedOutException.class})
+    ResponseEntity<ProblemDetail> unavailable(Exception e, HttpServletRequest r) {
+        return problem(HttpStatus.SERVICE_UNAVAILABLE, "storage-unavailable", "Storage temporarily unavailable",
+            "The transfer outcome may be unknown. Retry transfers with the same principal, Idempotency-Key and request body.", r, null);
+    }
     @ExceptionHandler({org.springframework.http.converter.HttpMessageNotReadableException.class,
         org.springframework.web.bind.MissingRequestHeaderException.class,
         org.springframework.web.method.annotation.MethodArgumentTypeMismatchException.class})
