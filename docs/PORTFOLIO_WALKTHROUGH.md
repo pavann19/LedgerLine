@@ -1,4 +1,4 @@
-# Portfolio walkthrough
+# Case study walkthrough
 
 LedgerLine demonstrates transactional backend correctness and reliable asynchronous projections with Java 21, Spring Boot, PostgreSQL and Kafka.
 
@@ -36,4 +36,4 @@ This runs the unchanged load workload, compares statements and daily summaries a
 - Show why late events require suffix repair and why statements cannot authorize spending.
 - Discuss the remaining operational gaps: TLS, least-privilege database roles, backup recovery, authenticated messaging and cloud verification.
 
-The demonstrated scope is a portfolio backend. Production banking operation, high availability and universal capacity remain unverified. A hosted demo should only be advertised after deployment and live checks succeed.
+The demonstrated scope is a case study backend. Production banking operation, high availability and universal capacity remain unverified. A hosted demo should only be advertised after deployment and live checks succeed.

@@ -1,6 +1,6 @@
 # Evidence boundaries
 
-The portfolio scope is a reproducible financial-backend demonstration with local validation and a temporary Azure acceptance run. It is not production banking software, a continuously operated managed-cloud service, or a capacity guarantee.
+The case study scope is a reproducible financial-backend demonstration with local validation and a temporary Azure acceptance run. It is not production banking software, a continuously operated managed-cloud service, or a capacity guarantee.
 
 ## Reproduce verification
 
