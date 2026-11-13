@@ -63,3 +63,6 @@ Run `./mvnw clean verify -Pcoverage --batch-mode` with Java 21 and Docker. New t
 Validation on 2026-10-26: `clean verify -Pcoverage` passed **90 Java tests** (62 ledger, 28 projection), with zero failures, errors or skips. Five image-scan policy tests also passed. Compose configuration parsing and provider/rate-limit environment forwarding passed. These are local component/integration results, not new remote CI, live-provider login, a fresh image vulnerability scan or an Azure performance rerun. See [sanitized validation evidence](evidence/api-security-2026-10-26.json).
 
 Implementation follows the [Spring Security resource-server validation model](https://docs.spring.io/spring-security/reference/servlet/oauth2/resource-server/jwt.html) and [springdoc Swagger configuration](https://springdoc.org/).
+
+
+Actuator metric names and metric values (`/actuator/metrics` and descendants) require the OPERATOR role in both services. Anonymous requests receive 401; authenticated customers receive 403. Health probes retain their existing policy. Invalid transfer shapes can return 400 before an idempotency payload conflict is resolved; retries must preserve the valid original body, key and principal.

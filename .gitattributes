@@ -12,3 +12,6 @@ mvnw text eol=lf
 *.png binary
 *.jpg binary
 *.pdf binary
+
+# Unified patch context uses significant leading spaces on empty lines.
+bench/baselines/*.patch -whitespace

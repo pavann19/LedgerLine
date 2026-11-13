@@ -80,6 +80,14 @@ class ApiSecurityIntegrationTest extends BaseProjectionIntegrationTest {
         return http.send(request.GET().build(), HttpResponse.BodyHandlers.ofString());
     }
 
+    @Test void profilingMetricsRequireAnAuthenticatedOperator() throws Exception {
+        String path = "/actuator/metrics/jvm.threads.live";
+        assertEquals(401, request(path, null).statusCode());
+        assertEquals(403, request(path, sign(claims("metrics-customer")
+            .claim("roles", List.of("CUSTOMER")))).statusCode());
+        assertEquals(200, request(path, sign(claims("metrics-operator"))).statusCode());
+    }
+
     @Test void validatesIssuerAudienceExpirySubjectAndSignatureOverHttp() throws Exception {
         for (var invalid : List.of(claims("claims").issuer("https://wrong.example.invalid"),
             claims("claims").audience("wrong-api"), claims("claims").audience(Collections.emptyList()),

@@ -23,3 +23,10 @@ The retained hot-account run failed its latency targets: p95 1155.68 ms and p99 
 4. For runtime changes, rerun relevant tests and CI before making release claims.
 
 No fresh long-running, paid-cloud or production validation was performed for this documentation update. See the [documentation index](README.md) for setup, tests and recovery.
+
+
+## Backend investigation - 3 November 2026
+
+The [new matched local experiment](PERFORMANCE_RESULTS_2026-11-03.md) retains the earlier failed runs and separately identifies the instrumented baseline and tested candidate by source/JAR hashes. Both candidate runs pass the unchanged original latency/error/convergence gates; large baseline variation limits attribution of an exact code-only effect. The final candidate passes 121 Java tests without failures, errors or skips and nine worker tests. This local evidence does not replace hosted checks for the published revision.
+
+The published workflow now includes production Java correctness/concurrency analysis with a known-defect control, alongside build/integration/security/image gates. Inspect the [feature-branch CI runs](https://github.com/pavann19/LedgerLine/actions/workflows/ci.yml?query=branch%3Abackend-hardening-20261103) for the exact commit. Historical workflow rows above remain historical. The broader 24-hour soak, production operation and HA remain unverified.

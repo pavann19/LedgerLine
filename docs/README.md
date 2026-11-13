@@ -4,6 +4,14 @@ Start with the [project overview](../README.md) and [verification status](VERIFI
 
 ## Guides
 
+- [Backend engineering checklist](ENGINEERING_CHECKLIST.md)
+- [Reproducible benchmark lab](PERFORMANCE_BENCHMARK.md)
+- [Matched experiment protocol](PERFORMANCE_EXPERIMENT_2026-11-03.md)
+- [Performance investigation results](PERFORMANCE_RESULTS_2026-11-03.md)
+- [Tracing and structured logs](TRACING.md)
+- [Cross-service tracing smoke](TRACE_FLOW_SMOKE.md)
+- [Java static analysis](STATIC_ANALYSIS.md)
+
 - [ARCHITECTURE](ARCHITECTURE.md)
 - [FINANCIAL INVARIANTS](FINANCIAL_INVARIANTS.md)
 - [API SECURITY](API_SECURITY.md)

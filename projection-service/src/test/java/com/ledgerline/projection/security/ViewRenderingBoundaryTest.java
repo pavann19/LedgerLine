@@ -14,6 +14,7 @@ import org.springframework.web.servlet.mvc.method.annotation.RequestMappingHandl
 import org.springframework.web.servlet.view.xslt.XsltViewResolver;
 import static org.junit.jupiter.api.Assertions.*;
 
+@org.springframework.context.annotation.Import(com.ledgerline.projection.observability.TracingConfiguration.class)
 @WebMvcTest(controllers = {ProjectionController.class}, properties = "projection.security.jwt-secret=test-only-secret-at-least-32-bytes-long")
 class ViewRenderingBoundaryTest {
     @Autowired ApplicationContext context;

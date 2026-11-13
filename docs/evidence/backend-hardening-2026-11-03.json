@@ -1,0 +1,117 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-03",
+  "scope": "synthetic local measurements on the prior working candidate, before current-main reconciliation; not a benchmark of the publication commit",
+  "base_head": "38db442d157efd1228fb7c0f83442042e7613050",
+  "workload": "bench/k6-cloud-load.js performance profile; unchanged 150-second original two-account workload",
+  "gates": {
+    "p95_ms_below": 750,
+    "p99_ms_below": 1500,
+    "http_failure_fraction_below": 0.01,
+    "convergence_seconds_at_most": 180
+  },
+  "attempts": [
+    {
+      "attempt": "a",
+      "source_manifest_sha256": "5455abac447db980e4ead413052f896c64f38db91e3049858e5e280bb24e0704",
+      "cpu_limits": {
+        "ledger_cpus": 1.0,
+        "postgres_cpus": 1.0,
+        "kafka_cpus": 0.5
+      },
+      "ledger_pool_size": 12,
+      "successful_transfers": 10795,
+      "transfers_per_second": 71.95917233810326,
+      "p95_ms": 1508.107342499999,
+      "p99_ms": 2277.1838893599997,
+      "http_failure_fraction": 0,
+      "original_load_status": "FAIL",
+      "recovery_restore_scope": "PASS: finite recovery and 11-table restore",
+      "cleanup": "PASS",
+      "retained_raw_metrics_sha256": "c34d0c255533b82c818dda0260303b6d9aa0d65358bcac03f736b21257d34b50"
+    },
+    {
+      "attempt": "b",
+      "source_manifest_sha256": "bdb3edb15e926f84428bc44a97ffda9c9bb6c5ec7cb08da4fec707b05272346e",
+      "cpu_limits": {
+        "ledger_cpus": 1.0,
+        "postgres_cpus": 1.0,
+        "kafka_cpus": 0.5
+      },
+      "ledger_pool_size": 12,
+      "successful_transfers": 10588,
+      "transfers_per_second": 70.58005286776489,
+      "p95_ms": 1533.4834562999997,
+      "p99_ms": 2277.6417153299885,
+      "http_failure_fraction": 0,
+      "original_load_status": "FAIL",
+      "recovery_restore_scope": "PASS: finite recovery and 11-table restore",
+      "cleanup": "PASS",
+      "retained_raw_metrics_sha256": "d4f070a807589879de7a9097dc9820c522dbddf6855e987d8c00283a50455827"
+    },
+    {
+      "attempt": "c",
+      "source_manifest_sha256": "bdb3edb15e926f84428bc44a97ffda9c9bb6c5ec7cb08da4fec707b05272346e",
+      "cpu_limits": {
+        "ledger_cpus": 2.0,
+        "postgres_cpus": 2.0,
+        "kafka_cpus": 1.0
+      },
+      "ledger_pool_size": 12,
+      "successful_transfers": 19811,
+      "transfers_per_second": 132.0772302438352,
+      "p95_ms": 824.5025745,
+      "p99_ms": 1294.0131894,
+      "http_failure_fraction": 0,
+      "original_load_status": "FAIL",
+      "recovery_restore_scope": "PASS: finite recovery and 11-table restore",
+      "cleanup": "PASS",
+      "retained_raw_metrics_sha256": "998b5bd6df9dc2f6eb7fc8f4b2b909d713a4c825a85bf5701e4e8fb9a789fbf6"
+    },
+    {
+      "attempt": "d",
+      "source_manifest_sha256": "bdb3edb15e926f84428bc44a97ffda9c9bb6c5ec7cb08da4fec707b05272346e",
+      "cpu_limits": {
+        "ledger_cpus": 2.0,
+        "postgres_cpus": 2.0,
+        "kafka_cpus": 1.0
+      },
+      "ledger_pool_size": 4,
+      "successful_transfers": 21805,
+      "transfers_per_second": 145.3703383734943,
+      "p95_ms": 783.4614125999998,
+      "p99_ms": 1255.4071486399994,
+      "http_failure_fraction": 0,
+      "original_load_status": "FAIL",
+      "recovery_restore_scope": "SKIPPED: load-only diagnostic",
+      "cleanup": "PASS",
+      "retained_raw_metrics_sha256": "6f145a9fe6bcc1e8c68705c34c722cf98289b6c7c484b2fd0350101288abcfcf"
+    },
+    {
+      "attempt": "e",
+      "source_manifest_sha256": "0e810cc8d75bcf39a7ed92eb93a4869c2a3df9161b9c552c5d518ed601952e0f",
+      "cpu_limits": {
+        "ledger_cpus": 2.0,
+        "postgres_cpus": 2.0,
+        "kafka_cpus": 1.0
+      },
+      "ledger_pool_size": 4,
+      "successful_transfers": 20399,
+      "transfers_per_second": 135.97730609438287,
+      "p95_ms": 833.0917163999998,
+      "p99_ms": 1388.5463907200028,
+      "http_failure_fraction": 0,
+      "original_load_status": "FAIL",
+      "recovery_restore_scope": "PASS: finite recovery and 11-table restore",
+      "cleanup": "PASS",
+      "retained_raw_metrics_sha256": "257038c2e620b93f696dd7661c2b7db7d23333e864f890b3d004cfabe2f26fa1"
+    }
+  ],
+  "limitations": [
+    "Every original workload p95 gate failed.",
+    "Shared-host sequential runs with source/resource/pool differences are not controlled code-only A/B measurements.",
+    "Separate many-account passes do not replace the original workload.",
+    "No real 24-hour soak, production HA or production capacity is established.",
+    "Raw receipts are retained privately; the summary is selected evidence, not independently complete run provenance."
+  ]
+}

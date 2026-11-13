@@ -11,9 +11,13 @@ public record TransferEventPayload(
     long amountMinor,
     String currency,
     Instant timestamp,
-    String correlationId
+    String correlationId,
+    String traceparent
 ) {
+    public TransferEventPayload(UUID eventId,UUID transactionId,UUID fromAccountId,UUID toAccountId,long amountMinor,String currency,Instant timestamp,String correlationId) {
+        this(eventId,transactionId,fromAccountId,toAccountId,amountMinor,currency,timestamp,correlationId,null);
+    }
     public TransferEventPayload(UUID eventId,UUID transactionId,UUID fromAccountId,UUID toAccountId,long amountMinor,String currency,Instant timestamp) {
-        this(eventId,transactionId,fromAccountId,toAccountId,amountMinor,currency,timestamp,transactionId.toString());
+        this(eventId,transactionId,fromAccountId,toAccountId,amountMinor,currency,timestamp,transactionId.toString(),null);
     }
 }
