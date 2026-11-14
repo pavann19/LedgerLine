@@ -190,7 +190,7 @@
     "Four post-load SQL validations passed; two were not reached after projection catch-up timed out.",
     "The observed projection backlog does not prove a monetary invariant violation; full validation was not reached.",
     "Initial Azure metrics showed storage pressure; the repeat remained slower and its root cause was not established.",
-    "No further cloud experiment was run after the user selected completion with measured limits."
+    "No further cloud experiment was run; the measured limits remain."
   ],
   "cloud_cleanup": {
     "confirmed_absent": true,

@@ -4,7 +4,7 @@
 
 LedgerLine is a Java 21 / Spring Boot 4.0 financial-backend demonstration. It records same-currency account transfers as signed integer minor-unit postings in PostgreSQL, then publishes a transactional outbox to Kafka for asynchronous statements and daily summaries.
 
-It is a portfolio implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
+It is a case study implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
 
 ## Financial model
 
@@ -44,7 +44,7 @@ The transfer-query optimization removes four PostgreSQL statements per fresh tra
 
 The [current local investigation](docs/PERFORMANCE_RESULTS_2026-11-03.md) profiles connection pools, transaction phases, PostgreSQL queries, JVM resources and Kafka lag. It includes a reproducible baseline patch, all matched runs and shared-host limitations. See the [backend checklist](docs/ENGINEERING_CHECKLIST.md) for tested correctness, structured tracing and CI gates.
 
-- [Five-minute portfolio walkthrough](docs/PORTFOLIO_WALKTHROUGH.md)
+- [Five-minute case study walkthrough](docs/PROJECT_WALKTHROUGH.md)
 - [Architecture](docs/ARCHITECTURE.md)
 - [Security boundaries](docs/SECURITY.md)
 - [OAuth2, OpenAPI and rate limiting](docs/API_SECURITY.md)

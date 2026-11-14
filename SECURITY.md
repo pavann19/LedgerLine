@@ -2,7 +2,7 @@
 
 ## Supported scope
 
-Security fixes target current `main`; no separately supported stable-release series or response-time SLA is declared. This is a portfolio implementation, not evidence of production certification. Read the [detailed security model](docs/SECURITY.md) and [reconciliation boundary](docs/RECOVERY_AND_RECONCILIATION.md).
+Security fixes target current `main`; no separately supported stable-release series or response-time SLA is declared. This is a case study implementation, not evidence of production certification. Read the [detailed security model](docs/SECURITY.md) and [reconciliation boundary](docs/RECOVERY_AND_RECONCILIATION.md).
 
 ## Reporting
 
