@@ -6,6 +6,31 @@ LedgerLine is a Java 21 / Spring Boot 4.0 financial-backend demonstration. It re
 
 It is a case study implementation with executable invariants. Production operation, high availability, banking compliance, and universal performance guarantees are **UNVERIFIED**.
 
+## Architecture
+
+The ledger service commits transfer state and outbox records before asynchronous publication and projection.
+
+```mermaid
+flowchart LR
+    C["Authenticated client"]
+    L["Ledger service"]
+    D["PostgreSQL: postings, balances, audit, outbox"]
+    R["Outbox relay"]
+    K["Kafka"]
+    P["Projection service"]
+    S["Statements"]
+    U["Daily summaries"]
+    C --> L
+    L --> D
+    D --> R
+    R --> K
+    K --> P
+    P --> S
+    P --> U
+```
+
+Simplified view; see [architecture](docs/ARCHITECTURE.md) for details.
+
 ## Financial model
 
 Accounts start at zero. Customers may create `CUSTOMER` accounts and debit only accounts they own. Operators may create `OVERDRAFT` and `INTERNAL` accounts and access all accounts. Only `OVERDRAFT` permits a negative balance; demo funding is a balanced transfer from an operator-created overdraft account. There is no deposit, withdrawal, closure, refund, FX, or reversal endpoint.
